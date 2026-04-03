@@ -2,6 +2,8 @@
 
 A loot tracking addon with toast notifications for WoW TBC Classic Anniversary Edition.
 
+![Toast Notifications](resources/item_tracking_toasts.png)
+
 ## Features
 
 - **Toast Notifications** — Windows Action Center-style pop-ups for looted items with quality-colored borders, fade animations, and configurable duration
@@ -13,7 +15,7 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 - **Loot History** — standalone pop-out window with item tooltips, roll details, name/player search, and quality filter
 - **Gold Tracking** — session gold total shown in history header
 - **Movable Anchor Bar** — toasts stack above or below; hides when locked, reveals on hover
-- **Minimap Button** — draggable "?" icon for quick access
+- **Minimap Button** — draggable spyglass icon for quick access
 - **Glassy Transparent Design** — dark semi-transparent backgrounds, thin borders, stays out of the way
 - **Blizzard Interface Options** — registered in Interface > AddOns
 
@@ -26,9 +28,25 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 | **Version** | 0.2.0 |
 | **Optional addons** | RCLootCouncil, LootReserve |
 
+## Loot History
+
+Browse past loot in a standalone pop-out window. Filter by item name, player name, or minimum quality. Rolled items are marked with an **R** indicator — hover to see the full roll breakdown and winner.
+
+Session gold is tracked and displayed in the header.
+
+![Loot History](resources/loot_history.png)
+
+### Roll Details
+
+Hover over any rolled item to see who rolled, what type (Need/Greed/Pass/Council/Reserve), the roll number, and the winner.
+
+![Roll Details](resources/loot_history_roll_details.png)
+
 ## Configuration
 
 Open settings with `/it config`, right-click the minimap button, or find **ItemTracker** in Interface > AddOns.
+
+![Settings](resources/settings.png)
 
 | Setting | Description | Default |
 |---|---|---|
@@ -48,7 +66,7 @@ Open settings with `/it config`, right-click the minimap button, or find **ItemT
 | `/it` | Show available commands |
 | `/it config` | Open settings panel |
 | `/it history` | Toggle loot history panel |
-| `/it clear` | Clear loot history |
+| `/it clear` | Clear loot history and session gold |
 | `/it status` | Show addon and integration status |
 | `/it test` | Simulate a loot drop |
 | `/it test roll` | Simulate a group roll |
