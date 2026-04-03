@@ -455,11 +455,15 @@ function IT:FireTestRoll()
     IT.Events:Fire("ROLL_STARTED", rollData)
 
     -- Simulate rolls arriving over time
-    local players = { "Thrall", "Jaina", "Sylvanas" }
-    local types   = { "need", "greed", "pass" }
+    local players = {
+        "Thrall", "Jaina", "Sylvanas", "Arthas", "Illidan",
+        "Kael", "Vashj", "Maiev", "Tyrande", "Cairne",
+        "Vol'jin", "Garrosh", "Rexxar", "Akama", "Medivh",
+    }
+    local types = { "need", "greed", "pass", "disenchant" }
     for i, p in ipairs(players) do
-        C_Timer.After(i * 1.2, function()
-            local rollType = types[i]
+        C_Timer.After(i * 0.6, function()
+            local rollType = types[math.random(1, #types)]
             local num = (rollType ~= "pass") and math.random(1, 100) or 0
             local rollEntry = { player = p, rollType = rollType, number = num }
             table.insert(rollData.rolls, rollEntry)
@@ -469,7 +473,7 @@ function IT:FireTestRoll()
     end
 
     -- Simulate winner after all rolls
-    C_Timer.After(#players * 1.2 + 1.5, function()
+    C_Timer.After(#players * 0.6 + 1.5, function()
         -- Pick the highest need/greed roller as winner
         local winner = nil
         local best = -1

@@ -25,6 +25,8 @@ IT.Toast = Toast
 local TOAST_WIDTH       = 280
 local TOAST_BASE_HEIGHT = 52
 local TOAST_ROLL_ROW_H  = 14
+local TOAST_ROLL_MAX    = 5        -- max visible roll lines
+local TOAST_ROLL_PANEL_W = 160     -- width of the right-side roll panel
 local TOAST_PADDING     = 8
 local TOAST_ICON_SIZE   = 36
 local TOAST_GAP         = 4       -- vertical gap between stacked toasts
@@ -151,12 +153,16 @@ function Toast:ReleaseToast(f)
     f:ClearAllPoints()
     f.data = nil
     f.rollID = nil
+    f.rollData = nil
     f.expireTime = nil
-    -- Clear roll lines
+    f:SetWidth(TOAST_WIDTH)
+    f:SetHeight(TOAST_BASE_HEIGHT)
+    -- Clear roll lines and panel
     for _, line in ipairs(f.rollLines) do
         line:SetText("")
         line:Hide()
     end
+    if f.rollPanel then f.rollPanel:Hide() end
     -- Remove from active list
     for i, t in ipairs(activeToasts) do
         if t == f then
@@ -258,21 +264,51 @@ end
 local function UpdateRollDisplay(toast, rolls)
     if not rolls or #rolls == 0 then return end
 
-    local baseY = -TOAST_BASE_HEIGHT + 4
-    for i, roll in ipairs(rolls) do
+    -- Sort a copy: Need/Greed/DE by number descending, Pass always at bottom
+    local sorted = {}
+    for i = 1, #rolls do sorted[i] = rolls[i] end
+    table.sort(sorted, function(a, b)
+        local aPass = (a.rollType == "pass") and 1 or 0
+        local bPass = (b.rollType == "pass") and 1 or 0
+        if aPass ~= bPass then return aPass < bPass end
+        return (a.number or 0) > (b.number or 0)
+    end)
+
+    -- Show up to TOAST_ROLL_MAX entries on the right side of the toast
+    local visible = math.min(#sorted, TOAST_ROLL_MAX)
+    for i = 1, visible do
+        local roll = sorted[i]
         local line = EnsureRollLine(toast, i)
         local typeStr = ROLL_TYPE_ICONS[roll.rollType] or roll.rollType
         local numStr = (roll.number and roll.number > 0) and (" - " .. roll.number) or ""
-        line:SetText("  " .. roll.player .. ": " .. typeStr .. numStr)
-        line:SetPoint("TOPLEFT", toast.icon, "BOTTOMLEFT", -TOAST_PADDING + 4,
-                      -(i - 1) * TOAST_ROLL_ROW_H)
+        line:SetText(roll.player .. ": " .. typeStr .. numStr)
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", toast, "TOPRIGHT", 6, -(i - 1) * TOAST_ROLL_ROW_H - 4)
         line:Show()
     end
 
-    -- Resize toast height
-    local rollHeight = #rolls * TOAST_ROLL_ROW_H + 6
-    toast:SetHeight(TOAST_BASE_HEIGHT + rollHeight)
-    Toast:RepositionAll()
+    -- Hide any extra lines from a previous display
+    for i = visible + 1, #toast.rollLines do
+        toast.rollLines[i]:Hide()
+    end
+
+    -- Show roll panel backdrop
+    if not toast.rollPanel then
+        toast.rollPanel = CreateFrame("Frame", nil, toast, "BackdropTemplate")
+        toast.rollPanel:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+        })
+        toast.rollPanel:SetBackdropColor(unpack(BG_COLOR))
+        toast.rollPanel:SetBackdropBorderColor(unpack(BORDER_COLOR))
+        toast.rollPanel:SetFrameLevel(toast:GetFrameLevel() - 1)
+    end
+    local panelH = visible * TOAST_ROLL_ROW_H + 8
+    toast.rollPanel:SetSize(TOAST_ROLL_PANEL_W, panelH)
+    toast.rollPanel:ClearAllPoints()
+    toast.rollPanel:SetPoint("TOPLEFT", toast, "TOPRIGHT", -1, 0)
+    toast.rollPanel:Show()
 end
 
 -- ============================================================================
@@ -307,6 +343,7 @@ function Toast:CreateRollToast(rollData)
     local toast = AcquireToast()
     SetupToastContent(toast, rollData)
     toast.rollID = rollData.rollID
+    toast.rollData = rollData        -- keep reference for live updates
     toast.expireTime = nil  -- don't auto-expire during roll
 
     -- Show source-aware status text
@@ -361,7 +398,8 @@ local function OnRollUpdate(rollID, rollEntry)
     local toast = FindToastByRollID(rollID)
     if not toast then return end
 
-    local rollData = IT.RollTracker:GetActiveRoll(rollID)
+    local rollData = (IT.RollTracker and IT.RollTracker:GetActiveRoll(rollID))
+                     or toast.rollData
     if rollData then
         UpdateRollDisplay(toast, rollData.rolls)
     end
@@ -378,6 +416,7 @@ local function OnRollEnded(rollData)
         end
         -- Start expire timer
         toast.rollID = nil
+        toast.rollData = nil
         toast.expireTime = GetTime() + (IT.db.settings.toastDuration or 8)
     end
 end
