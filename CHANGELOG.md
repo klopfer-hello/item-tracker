@@ -1,5 +1,15 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.2.1
+
+### Documentation
+
+- Added MIT license
+- Added screenshots to README (toast notifications, loot history, roll details, settings panel)
+- README now includes visual feature walkthrough with inline images
+
+---
+
 ## v0.2.0
 
 ### Improvements
