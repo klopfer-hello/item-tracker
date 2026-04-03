@@ -78,11 +78,11 @@ local function CreateToastFrame()
     f.icon:SetPoint("LEFT", f, "LEFT", TOAST_PADDING, 0)
     f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
-    -- Quality color border around icon
+    -- Thin neutral border around icon
     f.iconBorder = f:CreateTexture(nil, "OVERLAY")
     f.iconBorder:SetSize(TOAST_ICON_SIZE + 2, TOAST_ICON_SIZE + 2)
     f.iconBorder:SetPoint("CENTER", f.icon, "CENTER")
-    f.iconBorder:SetColorTexture(1, 1, 1, 0.3)
+    f.iconBorder:SetColorTexture(0.30, 0.30, 0.35, 0.5)
 
     -- Item name
     f.itemName = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -214,10 +214,6 @@ local function SetupToastContent(toast, data)
     else
         toast.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
     end
-
-    -- Quality border color
-    local r, g, b = IT:GetQualityColor(data.quality or 0)
-    toast.iconBorder:SetColorTexture(r, g, b, 0.5)
 
     -- Item name (colored by quality)
     local hex = IT:GetQualityHex(data.quality or 0)
@@ -441,7 +437,6 @@ local function OnGoldDrop(copper)
     toast.data = {}
 
     toast.icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
-    toast.iconBorder:SetColorTexture(0.95, 0.85, 0.3, 0.5)
     toast.itemName:SetText("|cFFFFD700" .. FormatCopper(copper) .. "|r")
     toast.subText:SetText("You")
     toast:SetHeight(TOAST_BASE_HEIGHT)
