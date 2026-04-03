@@ -45,13 +45,17 @@ local function IsRCLoaded()
     return false
 end
 
+local RC_ACEADDON_NAMES = { "RCLootCouncil_Classic", "RCLootCouncil" }
+
 local function GetRC()
     if not LibStub then return nil end
     local ok, rc = pcall(LibStub, "AceAddon-3.0")
     if not ok or not rc then return nil end
-    local ok2, addon = pcall(rc.GetAddon, rc, "RCLootCouncil")
-    if not ok2 then return nil end
-    return addon
+    for _, name in ipairs(RC_ACEADDON_NAMES) do
+        local ok2, addon = pcall(rc.GetAddon, rc, name)
+        if ok2 and addon then return addon end
+    end
+    return nil
 end
 
 -- ============================================================================
@@ -59,10 +63,13 @@ end
 -- ============================================================================
 
 local function OnLootTableReceived(rc)
+    -- rc.enabled is false when RCLC is disabled → ignore early-return calls
+    if not rc.enabled then return end
     local lt = rc:GetLootTable()
-    if not lt then return end
+    if not lt or #lt == 0 then return end
 
     for session, entry in ipairs(lt) do
+        -- entry.link is set by PrepareLootTable; nil means RCLC hasn't finished caching
         if entry.link and not activeSessions[session] then
             local itemID = IT:GetItemIDFromLink(entry.link)
             local rollID = ROLL_ID_BASE + session
@@ -88,6 +95,80 @@ local function OnLootTableReceived(rc)
         end
     end
 end
+
+-- ============================================================================
+-- Response Tracking (translates RCLC responses into ROLL_UPDATE events)
+-- ============================================================================
+
+-- Map RCLC response IDs to our rollType display format
+local RCLC_RESPONSE_MAP = {
+    [1]           = "council",   -- Mainspec/Need (response button 1)
+    [2]           = "council",   -- Offspec/Greed (response button 2)
+    [3]           = "council",   -- Minor Upgrade (response button 3)
+    PASS          = "pass",
+    AUTOPASS      = "pass",
+    TIMEOUT       = "pass",
+    DISABLED      = "pass",
+}
+
+local function OnResponseReceived(rc, name, session, data)
+    local rollData = activeSessions[session]
+    if not rollData or rollData.finished then return end
+
+    local responseID = data and data.response
+    if not responseID then return end
+    -- Skip status responses that aren't player choices
+    if responseID == "WAIT" or responseID == "ANNOUNCED" or responseID == "NOTANNOUNCED"
+       or responseID == "NOTHING" or responseID == "REMOVED" or responseID == "NOTELIGIBLE"
+       or responseID == "NOTINRAID" then
+        return
+    end
+
+    local rollType = RCLC_RESPONSE_MAP[responseID] or "council"
+    local rollNumber = data.roll or 0
+
+    -- Get colored response text from RCLC if available
+    local responseText
+    local ok, text = pcall(function() return rc:GetColoredResponseText(rollData.typeCode or "default", responseID) end)
+    if ok and text and text ~= "" then
+        responseText = text
+    end
+
+    local entry = {
+        player       = name,
+        rollType     = rollType,
+        number       = rollNumber,
+        responseText = responseText,  -- RCLC-specific colored text
+    }
+    table.insert(rollData.rolls, entry)
+    IT:Debug("RCLC response: " .. name .. " = " .. tostring(responseID) .. " (roll " .. rollNumber .. ")")
+    IT.Events:Fire("ROLL_UPDATE", rollData.rollID, entry)
+end
+
+-- ============================================================================
+-- Fallback: detect awards via ITEM_LOOTED (works for non-council players
+-- who don't receive VotingFrame comm messages)
+-- ============================================================================
+
+local function OnItemLooted(lootEntry)
+    if not lootEntry or not lootEntry.itemID then return end
+    for session, rollData in pairs(activeSessions) do
+        if rollData.itemID == lootEntry.itemID and not rollData.finished then
+            rollData.finished = true
+            rollData.winner = lootEntry.player
+            IT:Debug("RCLC award (via loot): session " .. session .. " to " .. (lootEntry.player or "?"))
+            IT.Events:Fire("ROLL_ENDED", rollData)
+            C_Timer.After(2, function()
+                activeSessions[session] = nil
+            end)
+            return
+        end
+    end
+end
+
+-- ============================================================================
+-- Award Tracking
+-- ============================================================================
 
 local function OnItemAwarded(session, winner)
     local rollData = activeSessions[session]
@@ -124,14 +205,24 @@ local function InstallHooks()
         IT:Debug("RCLC: hooked OnLootTableReceived")
     end
 
-    -- Hook voting frame's OnAwardedReceived (fires on all clients)
+    -- Hook voting frame's OnResponseReceived and OnAwardedReceived (fire on all clients)
     local ok, VF = pcall(function() return RC:GetModule("RCVotingFrame") end)
-    if ok and VF and VF.OnAwardedReceived then
-        hooksecurefunc(VF, "OnAwardedReceived", function(self, session, winner)
-            local ok2, err = pcall(OnItemAwarded, session, winner)
-            if not ok2 then IT:Debug("RCLC award hook error: " .. tostring(err)) end
-        end)
-        IT:Debug("RCLC: hooked OnAwardedReceived")
+    if ok and VF then
+        if VF.OnResponseReceived then
+            hooksecurefunc(VF, "OnResponseReceived", function(self, name, session, data)
+                local ok2, err = pcall(OnResponseReceived, RC, name, session, data)
+                if not ok2 then IT:Debug("RCLC response hook error: " .. tostring(err)) end
+            end)
+            IT:Debug("RCLC: hooked OnResponseReceived")
+        end
+
+        if VF.OnAwardedReceived then
+            hooksecurefunc(VF, "OnAwardedReceived", function(self, session, winner)
+                local ok2, err = pcall(OnItemAwarded, session, winner)
+                if not ok2 then IT:Debug("RCLC award hook error: " .. tostring(err)) end
+            end)
+            IT:Debug("RCLC: hooked OnAwardedReceived")
+        end
     end
 
     -- Also listen for RCMLAwardSuccess (ML client only, as bonus)
@@ -177,11 +268,18 @@ function RCLC:GetActiveSession(session)
     return activeSessions[session]
 end
 
+function RCLC:GetActiveSessions()
+    return activeSessions
+end
+
 -- ============================================================================
 -- Module Interface
 -- ============================================================================
 
 function RCLC:Initialize()
+    -- Fallback award detection for non-council players
+    IT.Events:Subscribe("ITEM_LOOTED", OnItemLooted)
+
     if IsRCLoaded() then
         -- RC already loaded, hook now (with slight delay for RC to finish init)
         C_Timer.After(1, InstallHooks)
