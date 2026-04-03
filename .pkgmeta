@@ -1,0 +1,11 @@
+package-as: ItemTracker
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - .claude
+  - .github
+  - .gitignore
+  - CLAUDE.md

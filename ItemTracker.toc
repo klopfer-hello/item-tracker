@@ -1,0 +1,38 @@
+## Interface: 20505
+## Title: |cFF00D1FFItemTracker|r - TBC Anniversary Edition
+## Notes: Loot tracking with toast notifications, roll tracking, and history. Glassy transparent design.
+## Author: Klopfer-Hello
+## Version: 0.1.0
+## SavedVariables: ItemTrackerDB
+## SavedVariablesPerCharacter: ItemTrackerCharDB
+
+# https://warcraft.wiki.gg/wiki/Addon_Categories
+## Category: Inventory
+## Category-deDE: Inventar
+## Category-esES: Inventario
+## Category-esMX: Inventario
+## Category-frFR: Inventaire
+## Category-itIT: Inventario
+## Category-koKR: 소지품
+## Category-ptBR: Inventário
+## Category-ruRU: Инвентарь
+## Category-zhCN: 背包
+## Category-zhTW: 背包
+
+# Core (must load first — framework, event bus, utilities)
+Core.lua
+
+# Data & Detection (no UI dependencies)
+modules\LootDetector.lua
+modules\RollTracker.lua
+modules\LootHistory.lua
+
+# External Addon Integration (safe if not installed)
+modules\RCLCIntegration.lua
+modules\LRIntegration.lua
+
+# UI Components
+modules\Toast.lua
+modules\UI.lua
+modules\Config.lua
+modules\Minimap.lua
