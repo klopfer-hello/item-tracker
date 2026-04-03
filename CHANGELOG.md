@@ -5,7 +5,10 @@
 ### Bug Fixes
 
 - **RCLootCouncil integration not activating** — addon lookup used wrong AceAddon name (`"RCLootCouncil"` instead of `"RCLootCouncil_Classic"`), causing all hooks to silently fail
-- **RCLC toasts stuck forever** — non-council players never received VotingFrame award comms; added `ITEM_LOOTED` fallback to detect awards for all raid members
+- **RCLC toasts stuck forever** — VotingFrame comms only fire for council/observer players; non-council raiders never received award notifications, causing toasts to accumulate indefinitely; fixed with multi-layer detection:
+  - `ITEM_LOOTED` fallback matches distributed items to active sessions
+  - 2-second polling timer checks RCLC's loot table for `awarded` field
+  - 3-minute safety timeout auto-finishes stuck sessions regardless
 - **Duplicate toasts on RCLC award** — loot toast appeared alongside the existing roll toast when the item was distributed; now suppressed for active RCLC sessions
 
 ### Improvements

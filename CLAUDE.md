@@ -128,6 +128,8 @@ Currently unused; reserved for future per-character overrides.
 - Hooks `VF:OnResponseReceived()` on the voting frame module → `ROLL_UPDATE` with RCLC colored response text (council members only)
 - Hooks `VF:OnAwardedReceived()` on the voting frame module → `ROLL_ENDED` with winner (council members only)
 - Subscribes to `ITEM_LOOTED` as fallback award detection — non-council players don't receive VotingFrame comms, so matching looted items to active sessions ends the roll toast
+- Runs a 2-second polling timer that checks RCLC's `GetLootTable()` for the `awarded` field (set for council/observer clients)
+- 3-minute safety timeout auto-finishes any session that wasn't resolved by other detection paths
 - Registers `RCMLAwardSuccess` message (ML client bonus) and `RCSessionEnd` (cleanup)
 - Uses rollID range 100000+ to avoid collisions with native rolls
 
