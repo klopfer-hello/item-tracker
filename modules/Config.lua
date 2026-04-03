@@ -287,18 +287,16 @@ local function CreateSlider(parent, label, yOffset, minVal, maxVal, step, getVal
     thumb:SetColorTexture(CD.value[1], CD.value[2], CD.value[3], 0.9)
     thumb:SetPoint("LEFT", trackBg, "LEFT", 0, 0)
 
-    -- Invisible native Slider for mouse input (sits over the track)
-    local slider = CreateFrame("Slider", nil, container)
-    slider:SetPoint("TOPLEFT",     trackBg, "TOPLEFT",     0,  6)
-    slider:SetPoint("BOTTOMRIGHT", trackBg, "BOTTOMRIGHT", 0, -6)
-    slider:SetMinMaxValues(minVal, maxVal)
-    slider:SetValueStep(step)
-    if slider.SetObeyStepOnDrag then
-        slider:SetObeyStepOnDrag(true)
-    end
-    slider:EnableMouse(true)
+    -- Manual mouse input on the track (native Slider unreliable in TBC Classic)
+    local hitArea = CreateFrame("Frame", nil, container)
+    hitArea:SetPoint("TOPLEFT",     trackBg, "TOPLEFT",     0,  8)
+    hitArea:SetPoint("BOTTOMRIGHT", trackBg, "BOTTOMRIGHT", 0, -8)
+    hitArea:EnableMouse(true)
+
+    local currentValue = minVal
 
     local function updateVisuals(value)
+        currentValue = value
         if step >= 1 then
             valTxt:SetText(tostring(math.floor(value + 0.5)))
         else
@@ -314,17 +312,44 @@ local function CreateSlider(parent, label, yOffset, minVal, maxVal, step, getVal
         end
     end
 
-    slider:SetScript("OnValueChanged", function(self, value)
-        value = math.floor(value / step + 0.5) * step
-        updateVisuals(value)
-        if setValue then setValue(value) end
+    local function valueFromMouse()
+        local cx = GetCursorPosition()
+        local scale = trackBg:GetEffectiveScale()
+        cx = cx / scale
+        local left = trackBg:GetLeft()
+        local right = trackBg:GetRight()
+        if not left or not right or right <= left then return currentValue end
+        local pct = math.max(0, math.min(1, (cx - left) / (right - left)))
+        local raw = minVal + pct * (maxVal - minVal)
+        return math.floor(raw / step + 0.5) * step
+    end
+
+    local isDragging = false
+
+    hitArea:SetScript("OnMouseDown", function(self, btn)
+        if btn == "LeftButton" then
+            isDragging = true
+            local v = valueFromMouse()
+            updateVisuals(v)
+            if setValue then setValue(v) end
+        end
+    end)
+    hitArea:SetScript("OnMouseUp", function()
+        isDragging = false
+    end)
+    hitArea:SetScript("OnUpdate", function()
+        if isDragging then
+            local v = valueFromMouse()
+            if v ~= currentValue then
+                updateVisuals(v)
+                if setValue then setValue(v) end
+            end
+        end
     end)
 
     container:SetScript("OnShow", function()
         if getValue then
-            local v = getValue()
-            slider:SetValue(v)
-            updateVisuals(v)
+            updateVisuals(getValue())
         end
     end)
 
