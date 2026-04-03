@@ -92,3 +92,7 @@ Open settings with `/it config`, right-click the minimap button, or find **ItemT
 4. **History** — items stored in SavedVariables, persist across sessions; rolled items include full breakdown on tooltip hover; filter by name/player or quality
 5. **Gold** — `CHAT_MSG_MONEY` tracked per session, shown in history header, not persisted
 6. **Toasts** — appear from the anchor bar, stack in configurable direction, fade in/out; oldest recycled when max reached
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
