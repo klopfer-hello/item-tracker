@@ -536,7 +536,7 @@ function UI:RefreshHistory()
         if gold > 0 then table.insert(parts, gold .. "g") end
         if silver > 0 then table.insert(parts, silver .. "s") end
         if cop > 0 then table.insert(parts, cop .. "c") end
-        historyFrame.goldLabel:SetText(table.concat(parts, " "))
+        historyFrame.goldLabel:SetText("Gold this session: " .. table.concat(parts, " "))
     else
         historyFrame.goldLabel:SetText("")
     end

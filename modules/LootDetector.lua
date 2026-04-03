@@ -210,17 +210,40 @@ end
 local sessionCopper = 0
 
 --- Parse a CHAT_MSG_MONEY message into copper value.
---- Handles localized gold/silver/copper strings via Blizzard globals.
-local function ParseMoneyMessage(msg)
-    local copper = 0
-    -- Extract gold, silver, copper using localized patterns
-    local gold = msg:match("(%d+) " .. (GOLD or "Gold"))
-    local silver = msg:match("(%d+) " .. (SILVER or "Silver"))
-    local cop = msg:match("(%d+) " .. (COPPER or "Copper"))
+--- Uses GOLD_AMOUNT / SILVER_AMOUNT / COPPER_AMOUNT globals which are
+--- localized format strings like "%d Gold" → convert to "(%d+) Gold" pattern.
+local moneyPatterns
 
-    if gold then copper = copper + tonumber(gold) * 10000 end
-    if silver then copper = copper + tonumber(silver) * 100 end
-    if cop then copper = copper + tonumber(cop) end
+local function BuildMoneyPatterns()
+    moneyPatterns = {}
+    -- GOLD_AMOUNT = "%d Gold" → "(%d+) Gold"
+    if GOLD_AMOUNT then
+        moneyPatterns.gold = GOLD_AMOUNT:gsub("%%d", "(%%d+)")
+    end
+    if SILVER_AMOUNT then
+        moneyPatterns.silver = SILVER_AMOUNT:gsub("%%d", "(%%d+)")
+    end
+    if COPPER_AMOUNT then
+        moneyPatterns.copper = COPPER_AMOUNT:gsub("%%d", "(%%d+)")
+    end
+end
+
+local function ParseMoneyMessage(msg)
+    if not moneyPatterns then BuildMoneyPatterns() end
+
+    local copper = 0
+    if moneyPatterns.gold then
+        local g = msg:match(moneyPatterns.gold)
+        if g then copper = copper + tonumber(g) * 10000 end
+    end
+    if moneyPatterns.silver then
+        local s = msg:match(moneyPatterns.silver)
+        if s then copper = copper + tonumber(s) * 100 end
+    end
+    if moneyPatterns.copper then
+        local c = msg:match(moneyPatterns.copper)
+        if c then copper = copper + tonumber(c) end
+    end
 
     return copper
 end
@@ -236,6 +259,17 @@ end
 
 function Detector:GetSessionGold()
     return sessionCopper
+end
+
+function Detector:ResetSessionGold()
+    sessionCopper = 0
+    IT.Events:Fire("GOLD_LOOTED", 0)
+end
+
+-- Test helper: add copper directly (used by /it test gold)
+function Detector._addTestGold(copper)
+    sessionCopper = sessionCopper + copper
+    IT.Events:Fire("GOLD_LOOTED", sessionCopper)
 end
 
 -- ============================================================================

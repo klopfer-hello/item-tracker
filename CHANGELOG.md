@@ -1,5 +1,45 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.2.0
+
+### Improvements
+
+- **Minimap & addon icon** — replaced placeholder "?" with spyglass icon (`INV_Misc_Spyglass_03`); added `## IconTexture` to TOC for addon list display
+- **Gold tracking fixed** — money parsing now uses `GOLD_AMOUNT`/`SILVER_AMOUNT`/`COPPER_AMOUNT` format strings (locale-safe); previously used non-existent globals
+- **Gold display** — history header shows "Gold this session: Xg Ys Zc"
+- **`/it clear` resets gold** — clearing history now also resets the session gold counter
+- **Hidden bar hover reveal** — when bar is locked (invisible), hovering over its position reveals it temporarily so history can still be opened
+- **Shift-click minimap** — shift+left-click on minimap button opens loot history directly
+- **Quest reward tracking** — items from quest NPCs now detected via `QUEST_LOOT_RECEIVED` and `LOOT_ITEM_PUSHED_SELF` fallback
+- **RCLootCouncil integration** — hooks into loot council sessions and awards
+- **LootReserve integration** — hooks into soft reserve rolls and winners
+- **Toast direction** — configurable upward (default) or downward stacking
+- **`/it test gold`** — simulate gold drops for testing
+
+### Bug Fixes
+
+- **Gold never tracked** — `GOLD`, `SILVER`, `COPPER` globals don't exist; replaced with `GOLD_AMOUNT`/`SILVER_AMOUNT`/`COPPER_AMOUNT` pattern conversion
+- **Quest items not tracked** — `CHAT_MSG_LOOT` doesn't fire for NPC quest rewards; added `QUEST_LOOT_RECEIVED` + `CHAT_MSG_SYSTEM` pushed-item fallback
+- **Module init crash blocked minimap** — one failing module prevented all subsequent modules from loading; wrapped `Initialize()` calls in `pcall`
+- **Minimap button invisible** — missing `SetMovable`/`EnableMouse`, wrong icon/border sizing; aligned with FishingKit's proven pattern
+- **Config sliders ugly** — replaced `BackdropTemplate` sliders with custom thin-track + invisible native Slider (FishingKit pattern)
+- **Dropdown closed immediately** — 1px gap between button and menu caused auto-close; fixed with overlap + grace period
+- **History blocked by toasts** — history panel was attached below bar (under toasts); made it a standalone draggable pop-out
+
+### Files Modified
+
+- `Core.lua` (version, `/it clear` gold reset, `/it test gold`, test LC/reserve commands, status command)
+- `modules/LootDetector.lua` (gold parsing fix, quest reward detection, pushed item fallback, session gold reset)
+- `modules/Toast.lua` (configurable direction, source labels for council/reserve)
+- `modules/UI.lua` (standalone history pop-out, filters, gold display, hover reveal, lock state)
+- `modules/Config.lua` (rewritten controls, toast direction checkbox, lock calls UI update, guarded InterfaceOptions)
+- `modules/Minimap.lua` (spyglass icon, proper sizing, shift-click history)
+- `modules/RCLCIntegration.lua` (new)
+- `modules/LRIntegration.lua` (new)
+- `ItemTracker.toc` (IconTexture, integration modules)
+
+---
+
 ## v0.1.0
 
 ### Initial Release

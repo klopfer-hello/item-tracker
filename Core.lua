@@ -39,7 +39,7 @@ end
 -- Constants
 -- ============================================================================
 
-IT.VERSION = "0.1.0"
+IT.VERSION = "0.2.0"
 IT.BUILD = "TBC-Anniversary"
 
 IT.QUALITY_POOR      = 0
@@ -335,12 +335,17 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
     elseif msg == "clear" then
         if IT.LootHistory then
             IT.LootHistory:Clear()
-            IT:Print("Loot history cleared.", IT.Colors.success)
         end
+        if IT.LootDetector and IT.LootDetector.ResetSessionGold then
+            IT.LootDetector:ResetSessionGold()
+        end
+        IT:Print("Loot history and session gold cleared.", IT.Colors.success)
     elseif msg == "reset" then
         IT:Print("Use /it config to manage settings.", IT.Colors.info)
     elseif msg == "test" then
         IT:FireTestLoot()
+    elseif msg == "test gold" then
+        IT:FireTestGold()
     elseif msg == "test roll" then
         IT:FireTestRoll()
     elseif msg == "test lc" then
@@ -586,4 +591,19 @@ function IT:FireTestReserve()
         IT:Print("  Winner: " .. winner, IT.Colors.success)
         IT.Events:Fire("ROLL_ENDED", rollData)
     end)
+end
+
+function IT:FireTestGold()
+    if IT.LootDetector and IT.LootDetector._addTestGold then
+        local copper = math.random(10000, 250000)
+        IT.LootDetector._addTestGold(copper)
+        local gold   = math.floor(copper / 10000)
+        local silver = math.floor((copper % 10000) / 100)
+        local cop    = copper % 100
+        local parts = {}
+        if gold > 0 then table.insert(parts, gold .. "g") end
+        if silver > 0 then table.insert(parts, silver .. "s") end
+        if cop > 0 then table.insert(parts, cop .. "c") end
+        IT:Print("Test gold: +" .. table.concat(parts, " "), IT.Colors.highlight)
+    end
 end

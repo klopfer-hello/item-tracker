@@ -78,7 +78,7 @@ local function CreateMinimapButton()
     local icon = f:CreateTexture(nil, "ARTWORK")
     icon:SetSize(17, 17)
     icon:SetPoint("TOPLEFT", 7, -6)
-    icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    icon:SetTexture("Interface\\Icons\\INV_Misc_Spyglass_03")
     icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
     f.icon = icon
 
