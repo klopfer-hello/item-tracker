@@ -1,5 +1,20 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.4.1
+
+### Bug Fixes
+
+- **RCLootCouncil integration not activating** — addon lookup used wrong AceAddon name (`"RCLootCouncil"` instead of `"RCLootCouncil_Classic"`), causing all hooks to silently fail
+- **RCLC toasts stuck forever** — non-council players never received VotingFrame award comms; added `ITEM_LOOTED` fallback to detect awards for all raid members
+- **Duplicate toasts on RCLC award** — loot toast appeared alongside the existing roll toast when the item was distributed; now suppressed for active RCLC sessions
+
+### Improvements
+
+- **RCLC response tracking** — council votes (Mainspec, Offspec, Minor Upgrade, Pass) now appear in the roll panel with RCLC's own colored response text
+- **Early-return guard** — `OnLootTableReceived` hook now skips RCLC's internal retry/reschedule calls
+
+---
+
 ## v0.4.0
 
 ### New Features

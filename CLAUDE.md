@@ -123,9 +123,11 @@ Currently unused; reserved for future per-character overrides.
 
 ### RCLootCouncil (`modules/RCLCIntegration.lua`)
 - Detects `RCLootCouncil_Classic` or `RCLootCouncil` via `IsAddOnLoaded`
-- Gets addon reference via `LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")`
-- Hooks `RC:OnLootTableReceived()` (fires on all clients) → `ROLL_STARTED` per session item
-- Hooks `VF:OnAwardedReceived()` on the voting frame module → `ROLL_ENDED` with winner
+- Gets addon reference via `LibStub("AceAddon-3.0"):GetAddon()` — tries `"RCLootCouncil_Classic"` first, then `"RCLootCouncil"`
+- Hooks `RC:OnLootTableReceived()` (fires on all clients) → `ROLL_STARTED` per session item; guarded by `rc.enabled` and `entry.link` checks to skip RCLC's internal retry/reschedule calls
+- Hooks `VF:OnResponseReceived()` on the voting frame module → `ROLL_UPDATE` with RCLC colored response text (council members only)
+- Hooks `VF:OnAwardedReceived()` on the voting frame module → `ROLL_ENDED` with winner (council members only)
+- Subscribes to `ITEM_LOOTED` as fallback award detection — non-council players don't receive VotingFrame comms, so matching looted items to active sessions ends the roll toast
 - Registers `RCMLAwardSuccess` message (ML client bonus) and `RCSessionEnd` (cleanup)
 - Uses rollID range 100000+ to avoid collisions with native rolls
 
