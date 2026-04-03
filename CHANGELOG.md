@@ -1,5 +1,20 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.4.0
+
+### New Features
+
+- **Live roll ranking panel** — roll toasts now show a sorted side panel to the right, ranking rollers from highest to lowest (top 5 visible), with passes grouped at the bottom; panel persists through winner announcement until the toast fades
+- **Configurable chat output** — new "Show chat messages" toggle in settings; when disabled, all addon chat messages are suppressed (toast-only mode)
+- **Neutral icon border** — removed quality-colored rectangle behind the toast icon; item quality is now conveyed solely through colored item name text
+
+### Improvements
+
+- **Test roll expanded** — `/it test roll` now simulates 15 players with random roll types (need/greed/pass/disenchant) for realistic testing
+- **Roll update fix** — roll display now updates correctly for test, RCLootCouncil, and LootReserve rolls (fallback to toast-stored rollData)
+
+---
+
 ## v0.3.1
 
 ### Bug Fixes

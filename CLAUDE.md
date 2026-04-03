@@ -71,7 +71,7 @@ WoW Events
 | [modules/LootHistory.lua](modules/LootHistory.lua) | Stores loot entries in SavedVariables, enforces size limits, fires `HISTORY_UPDATED` |
 | [modules/RCLCIntegration.lua](modules/RCLCIntegration.lua) | Hooks RCLootCouncil: `OnLootTableReceived` → ROLL_STARTED, `OnAwardedReceived` → ROLL_ENDED |
 | [modules/LRIntegration.lua](modules/LRIntegration.lua) | Hooks LootReserve: `RequestRoll` handler → ROLL_STARTED, `SendWinner` handler → ROLL_ENDED; tracks reserves via `RegisterListener` |
-| [modules/Toast.lua](modules/Toast.lua) | Creates/animates toast pop-ups, manages stacking (up or down), shows roll/council/reserve progress |
+| [modules/Toast.lua](modules/Toast.lua) | Creates/animates toast pop-ups, manages stacking (up or down), shows live sorted roll ranking in a right-side panel (top 5), neutral icon border with quality-colored text |
 | [modules/UI.lua](modules/UI.lua) | Movable anchor bar (hides on lock, reveals on hover) + standalone history pop-out with name/quality filters and session gold display |
 | [modules/Config.lua](modules/Config.lua) | Settings panel (standalone + InterfaceOptions), quality dropdowns, sliders, checkboxes |
 | [modules/Minimap.lua](modules/Minimap.lua) | Minimap "?" button, draggable around edge, left-click toggle / shift-click history / right-click config |
@@ -106,6 +106,7 @@ WoW Events
         position              = nil,   -- { point, relativePoint, x, y }
         minimapAngle          = 225,
         showMinimap           = true,
+        chatOutput            = true,  -- print messages to chat frame
     },
     history = {
         -- ordered newest-first; each entry:

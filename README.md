@@ -6,9 +6,9 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 
 ## Features
 
-- **Toast Notifications** — Windows Action Center-style pop-ups for looted items with quality-colored borders, fade animations, and configurable duration
+- **Toast Notifications** — Windows Action Center-style pop-ups for looted items with quality-colored text, fade animations, and configurable duration
 - **Solo & Group Loot** — separate minimum quality thresholds for solo and group/raid
-- **Roll Tracking** — real-time Need/Greed/Pass roll tracking with live toast updates
+- **Roll Tracking** — real-time Need/Greed/Pass roll tracking with live sorted ranking panel (top 5, highest first)
 - **RCLootCouncil Integration** — detects loot council sessions, shows voting progress, announces awards
 - **LootReserve Integration** — tracks soft reserves, shows roll requests, announces winners
 - **Quest Reward Tracking** — detects items received from quest NPCs
@@ -25,7 +25,7 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.3.1 |
+| **Version** | 0.4.0 |
 | **Optional addons** | RCLootCouncil, LootReserve |
 
 ## Loot History
