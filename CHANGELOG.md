@@ -1,5 +1,32 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.3.0
+
+### New Features
+
+- **Gold loot toasts** — configurable toast notification for each gold drop, with coin icon and amount; off by default, enable in settings ("Show gold loot toasts")
+- **Toast direction dropdown** — replaced checkbox with a proper Upward/Downward select dropdown
+
+### Improvements
+
+- **Lightened color palette** — toast, bar, and history backgrounds slightly lighter and more transparent for a less heavy look
+- **Generic dropdown builder** — `CreateDropdown` extracted from quality dropdown, reusable for any select control
+
+### Bug Fixes
+
+- **Gold toast never appeared** — test helper only fired `GOLD_LOOTED` (history update) but not `GOLD_DROP` (toast trigger)
+- **Test gold didn't accumulate** — display now shows both drop amount and cumulative session total
+
+### Files Modified
+
+- `Core.lua` (version, `toastGold` default, `FormatCopper` helper, test gold fix)
+- `modules/Toast.lua` (lightened palette, gold toast handler with coin icon)
+- `modules/Config.lua` (generic `CreateDropdown`, direction dropdown, gold toast checkbox)
+- `modules/LootDetector.lua` (`GOLD_DROP` event, test helper fires both events)
+- `modules/UI.lua` (lightened bar/history colors)
+
+---
+
 ## v0.2.1
 
 ### Documentation
