@@ -1,5 +1,17 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.3.1
+
+### Bug Fixes
+
+- **Sliders not draggable** — native WoW `Slider` frame doesn't accept mouse drag in TBC Classic Anniversary; replaced with manual mouse input (click + drag on track area, value calculated from cursor position)
+
+### Documentation
+
+- Updated screenshots (toasts, roll details, settings panel)
+
+---
+
 ## v0.3.0
 
 ### New Features

@@ -39,7 +39,7 @@ end
 -- Constants
 -- ============================================================================
 
-IT.VERSION = "0.3.0"
+IT.VERSION = "0.3.1"
 IT.BUILD = "TBC-Anniversary"
 
 IT.QUALITY_POOR      = 0

@@ -25,7 +25,7 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.3.0 |
+| **Version** | 0.3.1 |
 | **Optional addons** | RCLootCouncil, LootReserve |
 
 ## Loot History
