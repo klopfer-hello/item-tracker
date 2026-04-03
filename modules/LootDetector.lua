@@ -254,6 +254,9 @@ local function OnChatMsgMoney(msg)
     if copper > 0 then
         sessionCopper = sessionCopper + copper
         IT.Events:Fire("GOLD_LOOTED", sessionCopper)
+        if IT.db.settings.toastGold then
+            IT.Events:Fire("GOLD_DROP", copper)
+        end
     end
 end
 

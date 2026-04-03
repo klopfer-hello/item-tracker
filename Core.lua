@@ -91,6 +91,7 @@ local DB_DEFAULTS = {
         historySize         = 100,   -- max history entries kept
         locked              = false, -- lock bar position (hides bar when locked)
         toastUpward         = true,  -- true = toasts stack upward, false = downward
+        toastGold           = false, -- show toast for gold loot
         position            = nil,   -- saved bar position {point, relativePoint, x, y}
         minimapAngle        = 225,   -- minimap button angle in degrees
         showMinimap         = true,
