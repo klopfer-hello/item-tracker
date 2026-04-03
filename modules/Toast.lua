@@ -275,7 +275,7 @@ local function UpdateRollDisplay(toast, rolls)
     for i = 1, visible do
         local roll = sorted[i]
         local line = EnsureRollLine(toast, i)
-        local typeStr = ROLL_TYPE_ICONS[roll.rollType] or roll.rollType
+        local typeStr = roll.responseText or ROLL_TYPE_ICONS[roll.rollType] or roll.rollType
         local numStr = (roll.number and roll.number > 0) and (" - " .. roll.number) or ""
         line:SetText(roll.player .. ": " .. typeStr .. numStr)
         line:ClearAllPoints()
@@ -378,6 +378,14 @@ local function OnItemLooted(lootEntry)
     -- Skip items currently being rolled on (RollTracker handles those)
     if lootEntry.isGroupLoot and IT.RollTracker then
         for _, rollData in pairs(IT.RollTracker:GetActiveRolls()) do
+            if rollData.itemID == lootEntry.itemID and not rollData.finished then
+                return
+            end
+        end
+    end
+    -- Skip items handled by active RCLC sessions (RCLCIntegration handles those)
+    if IT.RCLCIntegration then
+        for _, rollData in pairs(IT.RCLCIntegration:GetActiveSessions()) do
             if rollData.itemID == lootEntry.itemID and not rollData.finished then
                 return
             end
