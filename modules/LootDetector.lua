@@ -273,6 +273,7 @@ end
 function Detector._addTestGold(copper)
     sessionCopper = sessionCopper + copper
     IT.Events:Fire("GOLD_LOOTED", sessionCopper)
+    IT.Events:Fire("GOLD_DROP", copper)
 end
 
 -- ============================================================================

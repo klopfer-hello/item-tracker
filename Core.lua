@@ -594,17 +594,22 @@ function IT:FireTestReserve()
     end)
 end
 
+local function FormatCopper(copper)
+    local g = math.floor(copper / 10000)
+    local s = math.floor((copper % 10000) / 100)
+    local c = copper % 100
+    local parts = {}
+    if g > 0 then table.insert(parts, g .. "g") end
+    if s > 0 then table.insert(parts, s .. "s") end
+    if c > 0 then table.insert(parts, c .. "c") end
+    return table.concat(parts, " ")
+end
+
 function IT:FireTestGold()
     if IT.LootDetector and IT.LootDetector._addTestGold then
         local copper = math.random(10000, 250000)
         IT.LootDetector._addTestGold(copper)
-        local gold   = math.floor(copper / 10000)
-        local silver = math.floor((copper % 10000) / 100)
-        local cop    = copper % 100
-        local parts = {}
-        if gold > 0 then table.insert(parts, gold .. "g") end
-        if silver > 0 then table.insert(parts, silver .. "s") end
-        if cop > 0 then table.insert(parts, cop .. "c") end
-        IT:Print("Test gold: +" .. table.concat(parts, " "), IT.Colors.highlight)
+        local total = IT.LootDetector:GetSessionGold()
+        IT:Print("Test gold: +" .. FormatCopper(copper) .. "  (session: " .. FormatCopper(total) .. ")", IT.Colors.highlight)
     end
 end
