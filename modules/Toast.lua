@@ -32,9 +32,9 @@ local FADE_IN_DURATION  = 0.25
 local FADE_OUT_DURATION = 0.5
 local SLIDE_DURATION    = 0.2
 
--- Glassy dark palette
-local BG_COLOR    = { 0.06, 0.06, 0.10, 0.82 }
-local BORDER_COLOR = { 0.25, 0.70, 0.95, 0.40 }
+-- Glassy palette (lightened)
+local BG_COLOR    = { 0.10, 0.10, 0.16, 0.78 }
+local BORDER_COLOR = { 0.30, 0.75, 0.98, 0.35 }
 
 -- ============================================================================
 -- Toast Pool & State
@@ -383,6 +383,38 @@ local function OnRollEnded(rollData)
 end
 
 -- ============================================================================
+-- Gold Toast
+-- ============================================================================
+
+local function FormatCopper(copper)
+    local gold   = math.floor(copper / 10000)
+    local silver = math.floor((copper % 10000) / 100)
+    local cop    = copper % 100
+    local parts = {}
+    if gold > 0 then table.insert(parts, gold .. "g") end
+    if silver > 0 then table.insert(parts, silver .. "s") end
+    if cop > 0 then table.insert(parts, cop .. "c") end
+    return table.concat(parts, " ")
+end
+
+local function OnGoldDrop(copper)
+    local toast = AcquireToast()
+    toast.data = {}
+
+    toast.icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+    toast.iconBorder:SetColorTexture(0.95, 0.85, 0.3, 0.5)
+    toast.itemName:SetText("|cFFFFD700" .. FormatCopper(copper) .. "|r")
+    toast.subText:SetText("You")
+    toast:SetHeight(TOAST_BASE_HEIGHT)
+
+    toast.expireTime = GetTime() + math.min(IT.db.settings.toastDuration or 8, 4)
+    table.insert(activeToasts, toast)
+
+    Toast:RepositionAll()
+    toast.fadeIn:Play()
+end
+
+-- ============================================================================
 -- Expiration Timer (OnUpdate)
 -- ============================================================================
 
@@ -409,6 +441,7 @@ end)
 -- ============================================================================
 
 function Toast:Initialize()
+    IT.Events:Subscribe("GOLD_DROP", OnGoldDrop)
     IT.Events:Subscribe("ITEM_LOOTED", OnItemLooted)
     IT.Events:Subscribe("ROLL_STARTED", OnRollStarted)
     IT.Events:Subscribe("ROLL_UPDATE", OnRollUpdate)

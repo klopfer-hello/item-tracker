@@ -74,8 +74,8 @@ end
 local function ShowBar()
     if not barFrame then return end
     barFrame:EnableMouse(true)
-    barFrame:SetBackdropColor(CD.bg[1], CD.bg[2], CD.bg[3], 0.82)
-    barFrame:SetBackdropBorderColor(CD.accent[1], CD.accent[2], CD.accent[3], 0.40)
+    barFrame:SetBackdropColor(0.10, 0.10, 0.16, 0.78)
+    barFrame:SetBackdropBorderColor(0.30, 0.75, 0.98, 0.35)
     barFrame.title:SetText("|cFF00D1FFItemTracker|r")
     barFrame.grip:SetText("|cFF666666::::|r")
 end
@@ -300,8 +300,8 @@ local function CreateHistoryPanel()
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    f:SetBackdropColor(CD.bg[1], CD.bg[2], CD.bg[3], CD.bgA)
-    f:SetBackdropBorderColor(CD.border[1], CD.border[2], CD.border[3], CD.borA)
+    f:SetBackdropColor(0.08, 0.08, 0.13, 0.88)
+    f:SetBackdropBorderColor(0.30, 0.75, 0.98, 0.35)
 
     -- Draggable
     f:SetMovable(true)
