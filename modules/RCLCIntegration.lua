@@ -150,40 +150,69 @@ end
 -- who don't receive VotingFrame comm messages)
 -- ============================================================================
 
+local function FinishSession(session, winner, source)
+    local rollData = activeSessions[session]
+    if not rollData or rollData.finished then return end
+
+    rollData.finished = true
+    rollData.winner = winner
+
+    IT:Debug("RCLC award (" .. source .. "): session " .. session .. " to " .. (winner or "none"))
+    IT.Events:Fire("ROLL_ENDED", rollData)
+
+    C_Timer.After(2, function()
+        activeSessions[session] = nil
+    end)
+end
+
 local function OnItemLooted(lootEntry)
     if not lootEntry or not lootEntry.itemID then return end
     for session, rollData in pairs(activeSessions) do
         if rollData.itemID == lootEntry.itemID and not rollData.finished then
-            rollData.finished = true
-            rollData.winner = lootEntry.player
-            IT:Debug("RCLC award (via loot): session " .. session .. " to " .. (lootEntry.player or "?"))
-            IT.Events:Fire("ROLL_ENDED", rollData)
-            C_Timer.After(2, function()
-                activeSessions[session] = nil
-            end)
+            FinishSession(session, lootEntry.player, "loot")
             return
         end
     end
 end
 
 -- ============================================================================
--- Award Tracking
+-- Polling: periodically check RCLC's loot table for awarded items and
+-- auto-expire sessions that have been active too long.
+-- VotingFrame comms only fire for council/observer players, so non-council
+-- raiders need this fallback to detect awards.
+-- ============================================================================
+
+local POLL_INTERVAL    = 2    -- seconds between checks
+local MAX_SESSION_AGE  = 180  -- seconds; auto-finish after this regardless
+
+local function PollActiveSessions()
+    if not next(activeSessions) then return end
+
+    local RC = GetRC()
+    local lt = RC and RC.GetLootTable and RC:GetLootTable()
+    local now = GetTime()
+
+    for session, rollData in pairs(activeSessions) do
+        if not rollData.finished then
+            -- Check 1: RCLC loot table has the awarded field set (council/observer)
+            if lt and lt[session] and lt[session].awarded then
+                local winner = lt[session].awarded
+                if winner == true then winner = nil end  -- bagged items use awarded=true
+                FinishSession(session, winner, "poll")
+            -- Check 2: safety timeout to prevent stuck toasts
+            elseif rollData.startTime and (now - rollData.startTime) > MAX_SESSION_AGE then
+                FinishSession(session, nil, "timeout")
+            end
+        end
+    end
+end
+
+-- ============================================================================
+-- Award Tracking (direct hooks — works for council/observer players)
 -- ============================================================================
 
 local function OnItemAwarded(session, winner)
-    local rollData = activeSessions[session]
-    if not rollData or rollData.finished then return end
-
-    rollData.finished = true
-    rollData.winner = winner
-    rollData.rolls = {{ player = winner or "?", rollType = "council", number = 0 }}
-
-    IT:Debug("RCLC award: session " .. session .. " to " .. (winner or "?"))
-    IT.Events:Fire("ROLL_ENDED", rollData)
-
-    C_Timer.After(2, function()
-        activeSessions[session] = nil
-    end)
+    FinishSession(session, winner, "hook")
 end
 
 -- ============================================================================
@@ -251,6 +280,12 @@ local function InstallHooks()
             wipe(activeSessions)
         end)
     end
+
+    -- Start polling timer for non-council award detection and safety timeout
+    C_Timer.NewTicker(POLL_INTERVAL, function()
+        local ok2, err = pcall(PollActiveSessions)
+        if not ok2 then IT:Debug("RCLC poll error: " .. tostring(err)) end
+    end)
 
     hooked = true
     IT:Print("RCLootCouncil integration active", IT.Colors.success)
