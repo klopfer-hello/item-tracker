@@ -95,6 +95,7 @@ local DB_DEFAULTS = {
         position            = nil,   -- saved bar position {point, relativePoint, x, y}
         minimapAngle        = 225,   -- minimap button angle in degrees
         showMinimap         = true,
+        chatOutput          = true,  -- print messages to chat frame
     },
     history = {},
 }
@@ -180,6 +181,7 @@ end)
 -- ============================================================================
 
 function IT:Print(msg, color)
+    if IT.db and IT.db.settings and not IT.db.settings.chatOutput then return end
     color = color or IT.Colors.addon
     DEFAULT_CHAT_FRAME:AddMessage(color .. "[ItemTracker]|r " .. msg)
 end

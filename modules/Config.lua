@@ -30,7 +30,7 @@ local CD = {
 -- ============================================================================
 
 local PANEL_WIDTH  = 340
-local PANEL_HEIGHT = 480
+local PANEL_HEIGHT = 502
 local PADDING      = 16
 local CONTENT_W    = PANEL_WIDTH - PADDING * 2
 
@@ -430,6 +430,11 @@ local function CreateConfigFrame()
     CreateCheckbox(f, "Show gold loot toasts", y,
         function() return IT.db.settings.toastGold end,
         function(v) IT.db.settings.toastGold = v end)
+    y = y - 22
+
+    CreateCheckbox(f, "Show chat messages", y,
+        function() return IT.db.settings.chatOutput end,
+        function(v) IT.db.settings.chatOutput = v end)
     y = y - 22
 
     CreateCheckbox(f, "Show minimap button", y,
