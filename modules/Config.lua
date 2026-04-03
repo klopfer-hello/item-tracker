@@ -145,10 +145,10 @@ local function CreateCheckbox(parent, label, yOffset, getValue, setValue)
 end
 
 -- ============================================================================
--- Quality Dropdown
+-- Generic Dropdown
 -- ============================================================================
 
-local function CreateQualityDropdown(parent, label, yOffset, getValue, setValue)
+local function CreateDropdown(parent, label, yOffset, options, getValue, setValue)
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(CONTENT_W, 38)
     container:SetPoint("TOPLEFT", parent, "TOPLEFT", PADDING, yOffset)
@@ -181,7 +181,7 @@ local function CreateQualityDropdown(parent, label, yOffset, getValue, setValue)
 
     -- Dropdown menu
     local menu = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-    menu:SetSize(160, #QUALITY_OPTIONS * 20 + 4)
+    menu:SetSize(160, #options * 20 + 4)
     menu:SetPoint("TOP", btn, "BOTTOM", 0, 1)  -- overlap 1px so mouse doesn't leave a gap
     menu:SetFrameStrata("TOOLTIP")
     menu:SetBackdrop({
@@ -193,7 +193,7 @@ local function CreateQualityDropdown(parent, label, yOffset, getValue, setValue)
     menu:SetBackdropBorderColor(CD.border[1], CD.border[2], CD.border[3], CD.borA)
     menu:Hide()
 
-    for i, opt in ipairs(QUALITY_OPTIONS) do
+    for i, opt in ipairs(options) do
         local item = CreateFrame("Button", nil, menu)
         item:SetSize(156, 20)
         item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(i - 1) * 20 - 2)
@@ -235,7 +235,7 @@ local function CreateQualityDropdown(parent, label, yOffset, getValue, setValue)
     -- Refresh value on show
     container:SetScript("OnShow", function()
         local val = getValue()
-        for _, opt in ipairs(QUALITY_OPTIONS) do
+        for _, opt in ipairs(options) do
             if opt.value == val then
                 btn.label:SetText(opt.label)
                 break
@@ -390,13 +390,17 @@ local function CreateConfigFrame()
         end)
     y = y - 22
 
-    CreateCheckbox(f, "Toast upward (uncheck for downward)", y,
+    local DIRECTION_OPTIONS = {
+        { value = true,  label = "Upward" },
+        { value = false, label = "Downward" },
+    }
+    CreateDropdown(f, "Toast direction", y, DIRECTION_OPTIONS,
         function() return IT.db.settings.toastUpward end,
         function(v)
             IT.db.settings.toastUpward = v
             if IT.Toast and IT.Toast.RepositionAll then IT.Toast:RepositionAll() end
         end)
-    y = y - 22
+    y = y - 44
 
     CreateCheckbox(f, "Show gold loot toasts", y,
         function() return IT.db.settings.toastGold end,
@@ -414,12 +418,12 @@ local function CreateConfigFrame()
     -- ── Quality Thresholds ──
     y = CreateSectionHeader(f, "Quality Thresholds", y)
 
-    CreateQualityDropdown(f, "Solo loot \226\128\148 minimum quality", y,
+    CreateDropdown(f, "Solo loot \226\128\148 minimum quality", y, QUALITY_OPTIONS,
         function() return IT.db.settings.soloQualityThreshold end,
         function(v) IT.db.settings.soloQualityThreshold = v end)
     y = y - 44
 
-    CreateQualityDropdown(f, "Group / Raid loot \226\128\148 minimum quality", y,
+    CreateDropdown(f, "Group / Raid loot \226\128\148 minimum quality", y, QUALITY_OPTIONS,
         function() return IT.db.settings.groupQualityThreshold end,
         function(v) IT.db.settings.groupQualityThreshold = v end)
     y = y - 48
