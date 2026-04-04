@@ -620,8 +620,8 @@ function UI:ToggleHistory()
     if historyFrame:IsShown() then
         historyFrame:Hide()
     else
-        UI:RefreshHistory()
         historyFrame:Show()
+        UI:RefreshHistory()
     end
 end
 
