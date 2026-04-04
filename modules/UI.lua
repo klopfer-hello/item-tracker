@@ -554,9 +554,8 @@ function UI:RefreshHistory()
         -- Icon
         row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
-        -- Quality border
-        local r, g, b = IT:GetQualityColor(entry.quality or 0)
-        row.iconBorder:SetColorTexture(r, g, b, 0.4)
+        -- Neutral border (matches toast style)
+        row.iconBorder:SetColorTexture(0.30, 0.30, 0.35, 0.5)
 
         -- Item name
         local hex = IT:GetQualityHex(entry.quality or 0)
