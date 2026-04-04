@@ -127,19 +127,36 @@ end
 -- Roll Message Parsing (system chat messages)
 -- ============================================================================
 
+--- Identify captures by content, not position (locale-safe).
+--- %d captures are pure digits; item links contain "|H"; the rest is a player name.
+local function ClassifyCaptures(captures)
+    local player, num, link
+    for _, cap in ipairs(captures) do
+        if not num and cap:match("^%d+$") then
+            num = tonumber(cap)
+        elseif not link and cap:find("|H") then
+            link = cap
+        else
+            player = player or cap
+        end
+    end
+    return player, num, link
+end
+
 local function TryMatchRoll(msg, pattern, rollType, isSelf)
     if not pattern then return nil end
+    local captures = {msg:match(pattern)}
+    if #captures == 0 then return nil end
+
     if isSelf then
-        -- Self patterns: "You Need Roll - %d for: %s" → (number, itemLink)
-        local num, link = msg:match(pattern)
+        local _, num, link = ClassifyCaptures(captures)
         if num then
-            return UnitName("player"), rollType, tonumber(num), link
+            return UnitName("player"), rollType, num, link
         end
     else
-        -- Other patterns: "%s Need Roll - %d for: %s" → (player, number, itemLink)
-        local player, num, link = msg:match(pattern)
-        if player then
-            return player, rollType, tonumber(num), link
+        local player, num, link = ClassifyCaptures(captures)
+        if player and num then
+            return player, rollType, num, link
         end
     end
     return nil
@@ -147,13 +164,13 @@ end
 
 local function TryMatchPass(msg, pattern, isSelf)
     if not pattern then return nil end
+    local captures = {msg:match(pattern)}
+    if #captures == 0 then return nil end
+
     if isSelf then
-        local link = msg:match(pattern)
-        if link then
-            return UnitName("player"), "pass", 0, link
-        end
+        return UnitName("player"), "pass", 0, captures[1]
     else
-        local player, link = msg:match(pattern)
+        local player, _, link = ClassifyCaptures(captures)
         if player then
             return player, "pass", 0, link
         end
@@ -163,8 +180,11 @@ end
 
 local function TryMatchWon(msg)
     if not rollPatterns or not rollPatterns.won then return nil end
-    local player, link = msg:match(rollPatterns.won)
-    if player then
+    local captures = {msg:match(rollPatterns.won)}
+    if #captures < 2 then return nil end
+
+    local player, _, link = ClassifyCaptures(captures)
+    if player and link then
         return player, link
     end
     return nil

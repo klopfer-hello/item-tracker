@@ -224,6 +224,8 @@ end
 --- Convert a Blizzard format string (e.g. LOOT_ITEM) to a Lua pattern.
 --- %s → (.+), %d → (%d+), other pattern-special characters are escaped.
 function IT:FormatToPattern(fmt)
+    -- Strip positional specifiers: %1$s → %s, %2$d → %d (locale reordering)
+    fmt = fmt:gsub("%%(%d+)%$([sd])", "%%%2")
     -- Replace format specifiers with placeholders before escaping
     fmt = fmt:gsub("%%s", "\001")
     fmt = fmt:gsub("%%d", "\002")
