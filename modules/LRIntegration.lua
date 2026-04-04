@@ -69,8 +69,11 @@ end
 -- Roll Request → ROLL_STARTED
 -- ============================================================================
 
-local function OnRequestRoll(item, players)
+local MAX_ITEM_RETRIES = 5
+
+local function OnRequestRoll(item, players, retries)
     if not item then return end
+    retries = retries or 0
 
     local itemID
     if type(item) == "table" and item.id then
@@ -84,10 +87,13 @@ local function OnRequestRoll(item, players)
     -- Build item link from ID if we don't have one
     local _, itemLink, quality, _, _, _, _, _, _, icon = GetItemInfo(itemID)
     if not itemLink then
-        -- Item not cached yet; schedule retry
-        C_Timer.After(0.5, function()
-            OnRequestRoll(item, players)
-        end)
+        if retries < MAX_ITEM_RETRIES then
+            C_Timer.After(0.5, function()
+                OnRequestRoll(item, players, retries + 1)
+            end)
+        else
+            IT:Debug("LR: gave up caching item " .. tostring(itemID) .. " after " .. MAX_ITEM_RETRIES .. " retries")
+        end
         return
     end
 
