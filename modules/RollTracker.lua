@@ -270,11 +270,21 @@ end
 -- Cancel / Timeout
 -- ============================================================================
 
+local CANCEL_GRACE_PERIOD = 5  -- seconds; wait for chat messages before treating as cancelled
+
 local function OnCancelLootRoll(rollID)
     local rollData = activeRolls[rollID]
-    if rollData and not rollData.finished then
-        Tracker:FinishRoll(rollID, nil)
-    end
+    if not rollData or rollData.finished then return end
+
+    -- CANCEL_LOOT_ROLL fires when our roll frame closes (i.e. the moment we
+    -- click Need/Greed/Pass), NOT when the group roll resolves.  Delay cleanup
+    -- so that result chat messages (individual rolls + winner) have time to
+    -- arrive and resolve the roll properly.
+    C_Timer.After(CANCEL_GRACE_PERIOD, function()
+        if not rollData.finished then
+            Tracker:FinishRoll(rollID, nil)
+        end
+    end)
 end
 
 -- ============================================================================
