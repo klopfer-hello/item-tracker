@@ -1,5 +1,13 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.4.3
+
+### Bug Fixes
+
+- **Session gold and history not showing on open** — `RefreshHistory()` was called before `historyFrame:Show()`, causing the `IsShown()` guard to bail out; swapped order so content renders on first open
+
+---
+
 ## v0.4.2
 
 ### Bug Fixes
