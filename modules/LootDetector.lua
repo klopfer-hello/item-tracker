@@ -253,15 +253,26 @@ local function ParseMoneyMessage(msg)
     return copper
 end
 
+local function AddSessionGold(copper)
+    sessionCopper = sessionCopper + copper
+    IT.Events:Fire("GOLD_LOOTED", sessionCopper)
+    if IT.db.settings.toastGold then
+        IT.Events:Fire("GOLD_DROP", copper)
+    end
+end
+
 local function OnChatMsgMoney(msg)
     if not IT.db.settings.enabled then return end
     local copper = ParseMoneyMessage(msg)
     if copper > 0 then
-        sessionCopper = sessionCopper + copper
-        IT.Events:Fire("GOLD_LOOTED", sessionCopper)
-        if IT.db.settings.toastGold then
-            IT.Events:Fire("GOLD_DROP", copper)
-        end
+        AddSessionGold(copper)
+    end
+end
+
+local function OnQuestTurnedIn(questID, xpReward, moneyReward)
+    if not IT.db.settings.enabled then return end
+    if moneyReward and moneyReward > 0 then
+        AddSessionGold(moneyReward)
     end
 end
 
@@ -288,6 +299,7 @@ end
 function Detector:Initialize()
     IT:RegisterEvent("CHAT_MSG_LOOT", OnChatMsgLoot)
     IT:RegisterEvent("CHAT_MSG_MONEY", OnChatMsgMoney)
+    IT:RegisterEvent("QUEST_TURNED_IN", OnQuestTurnedIn)
     -- Quest rewards (TBC Classic Anniversary)
     IT:RegisterEvent("QUEST_LOOT_RECEIVED", function(...)
         local ok, err = pcall(OnQuestLootReceived, ...)

@@ -1,5 +1,25 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.5.0
+
+### New Features
+
+- **Gold/hr tracking** — tracks session value of all looted items (vendor price via `GetItemInfo`, AH price via Auctionator if installed); grey vendor trash and quest gold rewards included
+- **LDB Data Broker** — creates a `"ItemTracker Gold"` data source via LibDataBroker; works with ElvUI DataTexts, Titan Panel, or any LDB display; main text shows combined gold/hr (raw + vendor); tooltip breaks down raw gold, vendor value, and AH value with per-hour rates and session totals; left-click opens history, shift-click opens config, right-click resets session
+
+### Bug Fixes
+
+- **Roll results missing player names** — `CANCEL_LOOT_ROLL` fired the moment the player clicked Need/Greed/Pass (closing their roll frame), immediately finishing the roll before result messages arrived; added a 5-second grace period so chat messages populate the rolls array
+- **Roll capture order broken on some clients** — pattern captures were assigned by position, which broke when `%d` appeared before `%s` in the format string; now identifies captures by content (pure digits → number, `|H` → item link, remainder → player name)
+- **LootReserve infinite retry freeze** — `OnRequestRoll` retried `GetItemInfo` every 0.5s with no limit when an item wasn't cached; capped at 5 retries
+
+### Improvements
+
+- **Shared FormatCopper utility** — `IT:FormatCopper()` replaces duplicated local functions across Core, Toast, and UI modules
+- **Positional format specifiers** — `FormatToPattern` now handles `%1$s`, `%2$d` style specifiers for localized global strings
+
+---
+
 ## v0.4.3
 
 ### Bug Fixes

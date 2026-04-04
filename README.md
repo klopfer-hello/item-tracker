@@ -13,7 +13,8 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 - **LootReserve Integration** — tracks soft reserves, shows roll requests, announces winners
 - **Quest Reward Tracking** — detects items received from quest NPCs
 - **Loot History** — standalone pop-out window with item tooltips, roll details, name/player search, and quality filter
-- **Gold Tracking** — session gold total shown in history header
+- **Gold Tracking** — session gold total shown in history header; gold/hr tracking with vendor and AH item valuation
+- **LDB Data Broker** — gold/hr display via LibDataBroker; works with ElvUI DataTexts, Titan Panel, or any LDB display
 - **Movable Anchor Bar** — toasts stack above or below; hides when locked, reveals on hover
 - **Minimap Button** — draggable spyglass icon for quick access
 - **Glassy Transparent Design** — dark semi-transparent backgrounds, thin borders, stays out of the way
@@ -25,8 +26,8 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.4.3 |
-| **Optional addons** | RCLootCouncil, LootReserve |
+| **Version** | 0.5.0 |
+| **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display) |
 
 ## Loot History
 
