@@ -429,16 +429,7 @@ end
 -- Gold Toast
 -- ============================================================================
 
-local function FormatCopper(copper)
-    local gold   = math.floor(copper / 10000)
-    local silver = math.floor((copper % 10000) / 100)
-    local cop    = copper % 100
-    local parts = {}
-    if gold > 0 then table.insert(parts, gold .. "g") end
-    if silver > 0 then table.insert(parts, silver .. "s") end
-    if cop > 0 then table.insert(parts, cop .. "c") end
-    return table.concat(parts, " ")
-end
+local function FormatCopper(copper) return IT:FormatCopper(copper) end
 
 local function OnGoldDrop(copper)
     local toast = AcquireToast()

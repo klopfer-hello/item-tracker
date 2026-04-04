@@ -529,14 +529,7 @@ function UI:RefreshHistory()
     -- Update session gold
     local copper = IT.LootDetector and IT.LootDetector:GetSessionGold() or 0
     if copper > 0 then
-        local gold   = math.floor(copper / 10000)
-        local silver = math.floor((copper % 10000) / 100)
-        local cop    = copper % 100
-        local parts = {}
-        if gold > 0 then table.insert(parts, gold .. "g") end
-        if silver > 0 then table.insert(parts, silver .. "s") end
-        if cop > 0 then table.insert(parts, cop .. "c") end
-        historyFrame.goldLabel:SetText("Gold this session: " .. table.concat(parts, " "))
+        historyFrame.goldLabel:SetText("Gold this session: " .. IT:FormatCopper(copper))
     else
         historyFrame.goldLabel:SetText("")
     end

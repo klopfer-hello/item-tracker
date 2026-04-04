@@ -602,7 +602,7 @@ function IT:FireTestReserve()
     end)
 end
 
-local function FormatCopper(copper)
+function IT:FormatCopper(copper)
     local g = math.floor(copper / 10000)
     local s = math.floor((copper % 10000) / 100)
     local c = copper % 100
@@ -612,6 +612,7 @@ local function FormatCopper(copper)
     if c > 0 then table.insert(parts, c .. "c") end
     return table.concat(parts, " ")
 end
+local FormatCopper = function(c) return IT:FormatCopper(c) end
 
 function IT:FireTestGold()
     if IT.LootDetector and IT.LootDetector._addTestGold then
