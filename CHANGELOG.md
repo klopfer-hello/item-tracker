@@ -1,5 +1,13 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.4.2
+
+### Bug Fixes
+
+- **History icon border colored by quality** — loot history rows used a quality-colored overlay on the icon border, inconsistent with toasts which use a neutral border; now both use the same neutral style
+
+---
+
 ## v0.4.1
 
 ### Bug Fixes
