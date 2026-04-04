@@ -344,6 +344,9 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         if IT.LootDetector and IT.LootDetector.ResetSessionGold then
             IT.LootDetector:ResetSessionGold()
         end
+        if IT.GoldTracker and IT.GoldTracker.Reset then
+            IT.GoldTracker:Reset()
+        end
         IT:Print("Loot history and session gold cleared.", IT.Colors.success)
     elseif msg == "reset" then
         IT:Print("Use /it config to manage settings.", IT.Colors.info)
@@ -362,6 +365,14 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("RCLootCouncil: " .. (IT.RCLCIntegration and IT.RCLCIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
         IT:Print("LootReserve: " .. (IT.LRIntegration and IT.LRIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
         IT:Print("History: " .. (IT.LootHistory and IT.LootHistory:GetCount() or 0) .. " entries", IT.Colors.info)
+        if IT.GoldTracker then
+            local r = IT.GoldTracker:GetRates()
+            IT:Print("Gold/hr: " .. IT:FormatCopper(math.floor(r.rawPerHour))
+                .. "  Vendor/hr: " .. IT:FormatCopper(math.floor(r.vendorPerHour))
+                .. (r.hasAuctionator and ("  AH/hr: " .. IT:FormatCopper(math.floor(r.ahPerHour))) or ""),
+                IT.Colors.info)
+        end
+        IT:Print("ElvUI: " .. (IT.ElvUIDataText and IT.ElvUIDataText:IsActive() and "active" or "not detected"), IT.Colors.info)
     else
         IT:Print("Commands:", IT.Colors.highlight)
         IT:Print("  /it config    - Open settings", IT.Colors.info)

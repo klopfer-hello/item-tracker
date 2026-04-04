@@ -15,7 +15,8 @@ The addon uses a global namespace `IT` (also `ItemTracker`) populated via the ad
 - **LootReserve Integration** — tracks soft reserves, shows roll requests, announces winners
 - **Loot History** — standalone pop-out window with item tooltips, roll details, and filters (name/player search, quality dropdown)
 - **Quest Reward Tracking** — detects items from quest NPCs via `QUEST_LOOT_RECEIVED` and `LOOT_ITEM_PUSHED_SELF` fallback
-- **Gold Tracking** — session gold total displayed in history header (not persisted)
+- **Gold Tracking** — session gold total displayed in history header (not persisted); gold/hr rates with vendor and AH item valuation
+- **LDB Data Broker** — session gold display via LibDataBroker; works with ElvUI DataTexts, Titan Panel, or any LDB display; tooltip shows vendor/AH totals and gold/hr rates; left-click history, shift-click config, right-click reset
 - **Movable Anchor Bar** — thin glassy strip; toasts stack above or below; drag to reposition; hides when locked but reveals on hover
 - **Minimap Button** — "?" icon, draggable around minimap edge; left-click toggle, shift-click history, right-click config
 - **Blizzard Integration** — appears in Interface → AddOns settings panel
@@ -52,13 +53,14 @@ WoW Events
                     │   Event Bus      │
                     └──┬──────┬───────┘
                        │      │
-              ┌────────┘      └────────┐
-              ▼                        ▼
-         LootHistory              Toast (UI)
-         (SavedVars)              (notifications)
-              │
-              ▼
-         UI (history panel)
+              ┌────────┘      └──────────────┐
+              ▼                               ▼
+         LootHistory              ┌──── Toast (UI)
+         (SavedVars)              │     (notifications)
+              │                   │
+              ▼                   ▼
+         UI (history)        GoldTracker ──→ ElvUIDataText
+                            (vendor/AH/hr)   (ElvUI panel)
 ```
 
 ## File Structure
@@ -71,6 +73,8 @@ WoW Events
 | [modules/LootHistory.lua](modules/LootHistory.lua) | Stores loot entries in SavedVariables, enforces size limits, fires `HISTORY_UPDATED` |
 | [modules/RCLCIntegration.lua](modules/RCLCIntegration.lua) | Hooks RCLootCouncil: `OnLootTableReceived` → ROLL_STARTED, `OnAwardedReceived` → ROLL_ENDED |
 | [modules/LRIntegration.lua](modules/LRIntegration.lua) | Hooks LootReserve: `RequestRoll` handler → ROLL_STARTED, `SendWinner` handler → ROLL_ENDED; tracks reserves via `RegisterListener` |
+| [modules/GoldTracker.lua](modules/GoldTracker.lua) | Session gold/hr tracking: accumulates vendor value (`GetItemInfo` sellPrice) and AH value (Auctionator API) for self-looted items; fires `GOLD_RATES_UPDATED` |
+| [modules/ElvUIDataText.lua](modules/ElvUIDataText.lua) | LDB (LibDataBroker) data source: session gold display, tooltip with vendor/AH breakdown and gold/hr rates, click handlers for history/config/reset; works with ElvUI, Titan Panel, or any LDB display; safe if LDB not available |
 | [modules/Toast.lua](modules/Toast.lua) | Creates/animates toast pop-ups, manages stacking (up or down), shows live sorted roll ranking in a right-side panel (top 5), neutral icon border with quality-colored text |
 | [modules/UI.lua](modules/UI.lua) | Movable anchor bar (hides on lock, reveals on hover) + standalone history pop-out with name/quality filters and session gold display |
 | [modules/Config.lua](modules/Config.lua) | Settings panel (standalone + InterfaceOptions), quality dropdowns, sliders, checkboxes |
@@ -81,10 +85,12 @@ WoW Events
 | Event | Payload | Fired by |
 |---|---|---|
 | `ITEM_LOOTED` | `{ itemLink, itemID, quality, count, player, isSelf, isGroupLoot, timestamp, icon }` | LootDetector |
+| `ITEM_VALUE` | same as `ITEM_LOOTED` but fires for all self-looted items regardless of quality threshold | LootDetector |
 | `GOLD_LOOTED` | `sessionCopper` (number) | LootDetector |
 | `ROLL_STARTED` | `rollData` table | RollTracker, RCLCIntegration, LRIntegration |
 | `ROLL_UPDATE` | `rollID, { player, rollType, number }` | RollTracker, RCLCIntegration, LRIntegration |
 | `ROLL_ENDED` | `rollData` table (with `winner`, `rolls`, `finished`, `source` fields) | RollTracker, RCLCIntegration, LRIntegration |
+| `GOLD_RATES_UPDATED` | (none) | GoldTracker |
 | `HISTORY_UPDATED` | (none) | LootHistory |
 | `PLAYER_READY` | (none) | Core |
 | `PLAYER_LOGOUT` | (none) | Core |
@@ -140,7 +146,20 @@ Currently unused; reserved for future per-character overrides.
 - Wraps `LootReserve.Comm.Handlers[19]` (SendWinner opcode) → `ROLL_ENDED` with winner
 - Uses rollID range 200000+ to avoid collisions
 
-Both integrations are safe — they do nothing if the external addon is not installed, and all hooks are wrapped in `pcall`.
+### Auctionator (`modules/GoldTracker.lua`)
+- Detects `Auctionator.API.v1.GetAuctionPriceByItemID` at runtime
+- Queries AH prices per looted item via `Auctionator.API.v1.GetAuctionPriceByItemID("ItemTracker", itemID)`
+- Returns copper value or nil; nil falls back to vendor price
+- Non-BoP items only (BoP items use vendor price for both columns)
+
+### LibDataBroker / ElvUI (`modules/ElvUIDataText.lua`)
+- Gets `LibDataBroker-1.1` via `LibStub` (provided by ElvUI_Libraries and many other addons)
+- Creates LDB data source `"ItemTracker Gold"` with `type = "data source"`
+- Any LDB display (ElvUI DataTexts, Titan Panel, ChocolateBar) auto-discovers it
+- ElvUI shows it as `"LDB: ItemTracker Gold"` in DataText config
+- Updates text via `GOLD_RATES_UPDATED` event subscription
+
+All integrations are safe — they do nothing if the external addon is not installed, and all hooks are wrapped in `pcall`.
 
 ## Game Version Notes (Critical)
 

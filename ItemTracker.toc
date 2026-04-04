@@ -25,12 +25,14 @@ Core.lua
 
 # Data & Detection (no UI dependencies)
 modules\LootDetector.lua
+modules\GoldTracker.lua
 modules\RollTracker.lua
 modules\LootHistory.lua
 
 # External Addon Integration (safe if not installed)
 modules\RCLCIntegration.lua
 modules\LRIntegration.lua
+modules\ElvUIDataText.lua
 
 # UI Components
 modules\Toast.lua

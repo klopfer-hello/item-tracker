@@ -95,8 +95,6 @@ local function OnChatMsgLoot(msg)
     -- In solo mode only show own loot; in group mode show everyone's
     if not isGroupLoot and not isSelf then return end
 
-    if not PassesQualityThreshold(quality, isGroupLoot) then return end
-
     local entry = {
         itemLink    = itemLink,
         itemID      = itemID,
@@ -108,6 +106,13 @@ local function OnChatMsgLoot(msg)
         timestamp   = GetTime(),
         icon        = icon,
     }
+
+    -- Gold tracking needs all self-looted items regardless of quality
+    if isSelf then
+        IT.Events:Fire("ITEM_VALUE", entry)
+    end
+
+    if not PassesQualityThreshold(quality, isGroupLoot) then return end
 
     IT:Debug("Loot detected: " .. itemLink .. " x" .. entry.count .. " by " .. player)
     IT.Events:Fire("ITEM_LOOTED", entry)
