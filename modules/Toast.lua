@@ -305,6 +305,13 @@ local function UpdateRollDisplay(toast, rolls)
     toast.rollPanel:ClearAllPoints()
     toast.rollPanel:SetPoint("TOPLEFT", toast, "TOPRIGHT", -1, 0)
     toast.rollPanel:Show()
+
+    -- Grow toast height to match roll panel so stacked toasts don't overlap
+    local requiredH = math.max(TOAST_BASE_HEIGHT, panelH)
+    if toast:GetHeight() ~= requiredH then
+        toast:SetHeight(requiredH)
+        Toast:RepositionAll()
+    end
 end
 
 -- ============================================================================

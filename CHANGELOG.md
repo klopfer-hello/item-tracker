@@ -1,5 +1,13 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.5.2
+
+### Bug Fixes
+
+- **Roll panels overlap when multiple items are rolled** — when two or more roll toasts were active simultaneously, their right-side roll panels overlapped because the toast height stayed at the base 52px while the roll panel could be taller (up to 78px for 5 entries); toast height now grows to match the roll panel, so stacked toasts leave enough vertical space
+
+---
+
 ## v0.5.1
 
 ### Bug Fixes
