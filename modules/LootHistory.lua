@@ -99,15 +99,15 @@ end
 -- ============================================================================
 
 local function OnItemLooted(lootEntry)
-    -- Don't double-add items that are going through the roll system.
-    -- RollTracker will handle those via ROLL_ENDED.
+    -- Don't double-add items that are (or were recently) part of a roll.
+    -- ROLL_ENDED handles those. Include finished rolls still in the active
+    -- table (cleaned up after 2 s) to prevent duplicate entries.
     if lootEntry.isGroupLoot then
-        -- Check if there's an active roll for this item
         local activeRolls = IT.RollTracker and IT.RollTracker:GetActiveRolls()
         if activeRolls then
             for _, rollData in pairs(activeRolls) do
-                if rollData.itemID == lootEntry.itemID and not rollData.finished then
-                    return  -- skip; ROLL_ENDED will handle it
+                if rollData.itemID == lootEntry.itemID then
+                    return  -- skip; ROLL_ENDED handles it
                 end
             end
         end

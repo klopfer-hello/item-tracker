@@ -312,14 +312,12 @@ end
 -- ============================================================================
 
 function Toast:CreateLootToast(lootEntry)
-    -- Enforce max visible toasts
+    -- Enforce max visible toasts — immediately release oldest (not async fade)
     while #activeToasts >= (IT.db.settings.toastMaxVisible or 5) do
         local oldest = activeToasts[1]
-        if oldest then
-            oldest.fadeOut:Play()
-        else
-            break
-        end
+        if not oldest then break end
+        oldest.fadeOut:Stop()
+        Toast:ReleaseToast(oldest)
     end
 
     local toast = AcquireToast()
@@ -350,6 +348,11 @@ function Toast:CreateRollToast(rollData)
         toast.subText:SetText("|cFFFFCC00Rolling...|r")
     end
 
+    -- Show pre-populated rolls (e.g. LootReserve reserve entries)
+    if rollData.rolls and #rollData.rolls > 0 then
+        UpdateRollDisplay(toast, rollData.rolls)
+    end
+
     table.insert(activeToasts, toast)
     Toast:RepositionAll()
     toast.fadeIn:Play()
@@ -375,18 +378,19 @@ end
 -- ============================================================================
 
 local function OnItemLooted(lootEntry)
-    -- Skip items currently being rolled on (RollTracker handles those)
+    -- Skip items that are (or were recently) part of a roll — ROLL_ENDED handles those.
+    -- Include finished rolls still in the active table (cleaned up after 2 s).
     if lootEntry.isGroupLoot and IT.RollTracker then
         for _, rollData in pairs(IT.RollTracker:GetActiveRolls()) do
-            if rollData.itemID == lootEntry.itemID and not rollData.finished then
+            if rollData.itemID == lootEntry.itemID then
                 return
             end
         end
     end
-    -- Skip items handled by active RCLC sessions (RCLCIntegration handles those)
+    -- Skip items handled by RCLC sessions (active or recently finished)
     if IT.RCLCIntegration then
         for _, rollData in pairs(IT.RCLCIntegration:GetActiveSessions()) do
-            if rollData.itemID == lootEntry.itemID and not rollData.finished then
+            if rollData.itemID == lootEntry.itemID then
                 return
             end
         end

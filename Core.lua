@@ -39,7 +39,7 @@ end
 -- Constants
 -- ============================================================================
 
-IT.VERSION = "0.3.1"
+IT.VERSION = "0.5.1"
 IT.BUILD = "TBC-Anniversary"
 
 IT.QUALITY_POOR      = 0
@@ -129,7 +129,10 @@ end
 function EventBus:Fire(event, ...)
     if not busListeners[event] then return end
     for _, callback in ipairs(busListeners[event]) do
-        callback(...)
+        local ok, err = pcall(callback, ...)
+        if not ok then
+            IT:Debug("EventBus error in " .. event .. ": " .. tostring(err))
+        end
     end
 end
 
@@ -171,7 +174,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
     end
     if moduleHandlers[event] then
         for _, cb in ipairs(moduleHandlers[event]) do
-            cb(...)
+            local ok, err = pcall(cb, ...)
+            if not ok then
+                IT:Debug("Event handler error in " .. event .. ": " .. tostring(err))
+            end
         end
     end
 end)
