@@ -26,7 +26,7 @@ A loot tracking addon with toast notifications for WoW TBC Classic Anniversary E
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.5.0 |
+| **Version** | 0.5.1 |
 | **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display) |
 
 ## Loot History
@@ -88,7 +88,7 @@ Open settings with `/it config`, right-click the minimap button, or find **ItemT
 ## How It Works
 
 1. **Loot Detection** — parses `CHAT_MSG_LOOT` and `QUEST_LOOT_RECEIVED` using locale-safe patterns built from Blizzard global strings, works on all WoW client languages
-2. **Roll Tracking** — listens to `START_LOOT_ROLL` and roll result system messages; toasts persist during active rolls and update in real time
+2. **Roll Tracking** — uses `START_LOOT_ROLL` and `C_LootHistory` API for reliable roll detection; `LOOT_ROLLS_COMPLETE` for definitive winner signals; toasts persist during active rolls and update in real time
 3. **External Addons** — hooks into RCLootCouncil and LootReserve APIs to track loot council votes and soft reserve rolls; safe when neither is installed
 4. **History** — items stored in SavedVariables, persist across sessions; rolled items include full breakdown on tooltip hover; filter by name/player or quality
 5. **Gold** — `CHAT_MSG_MONEY` tracked per session, shown in history header, not persisted

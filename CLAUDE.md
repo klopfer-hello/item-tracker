@@ -43,7 +43,9 @@ WoW Events
     ├─ CHAT_MSG_SYSTEM ──────→ LootDetector ──→ fires ITEM_LOOTED (pushed items)
     ├─ CHAT_MSG_MONEY ───────→ LootDetector ──→ fires GOLD_LOOTED
     │
-    ├─ START_LOOT_ROLL ──────→ RollTracker ───→ fires ROLL_STARTED / ROLL_UPDATE / ROLL_ENDED
+    ├─ START_LOOT_ROLL ──────────→ RollTracker ──→ fires ROLL_STARTED
+    ├─ LOOT_HISTORY_ROLL_CHANGED → RollTracker ──→ fires ROLL_UPDATE
+    ├─ LOOT_ROLLS_COMPLETE ──────→ RollTracker ──→ fires ROLL_ENDED
     │
     ├─ RC:OnLootTableReceived → RCLCIntegration → fires ROLL_STARTED / ROLL_ENDED
     ├─ LR RequestRoll/Winner ─→ LRIntegration ──→ fires ROLL_STARTED / ROLL_ENDED
@@ -69,7 +71,7 @@ WoW Events
 |---|---|
 | [Core.lua](Core.lua) | Framework: event bus, WoW event registration API, SavedVariables, utilities, slash commands, test harness |
 | [modules/LootDetector.lua](modules/LootDetector.lua) | Parses `CHAT_MSG_LOOT`, `QUEST_LOOT_RECEIVED`, `CHAT_MSG_SYSTEM` (pushed items), `CHAT_MSG_MONEY`; fires `ITEM_LOOTED` and `GOLD_LOOTED` |
-| [modules/RollTracker.lua](modules/RollTracker.lua) | Tracks `START_LOOT_ROLL`, parses roll system messages, fires `ROLL_STARTED`/`ROLL_UPDATE`/`ROLL_ENDED` |
+| [modules/RollTracker.lua](modules/RollTracker.lua) | Tracks rolls via `START_LOOT_ROLL`, `C_LootHistory` API, and `LOOT_ROLLS_COMPLETE`; fires `ROLL_STARTED`/`ROLL_UPDATE`/`ROLL_ENDED`; safety timeout via `GetLootRollTimeLeft` polling |
 | [modules/LootHistory.lua](modules/LootHistory.lua) | Stores loot entries in SavedVariables, enforces size limits, fires `HISTORY_UPDATED` |
 | [modules/RCLCIntegration.lua](modules/RCLCIntegration.lua) | Hooks RCLootCouncil: `OnLootTableReceived` → ROLL_STARTED, `OnAwardedReceived` → ROLL_ENDED |
 | [modules/LRIntegration.lua](modules/LRIntegration.lua) | Hooks LootReserve: `RequestRoll` handler → ROLL_STARTED, `SendWinner` handler → ROLL_ENDED; tracks reserves via `RegisterListener` |
@@ -172,6 +174,8 @@ All integrations are safe — they do nothing if the external addon is not insta
 - **`QUEST_LOOT_RECEIVED(questID, itemLink, count)`** — fires when quest reward items are received from NPCs.
 - **`LOOT_ITEM_PUSHED_SELF`** — Blizzard global string for items pushed to bags; used as fallback for quest rewards.
 - `InterfaceOptions_AddCategory(panel)` may not exist; guarded with existence check.
+- **`C_LootHistory`** namespace is available — `GetItem()`, `GetPlayerInfo()`, `GetNumItems()` work; `LOOT_HISTORY_ROLL_CHANGED` and `LOOT_ROLLS_COMPLETE` events fire correctly.
+- **`GetLootRollTimeLeft(rollID)`** is available — returns seconds remaining (0 when expired); wrapped in `pcall` for safety.
 
 ## Coding Conventions
 

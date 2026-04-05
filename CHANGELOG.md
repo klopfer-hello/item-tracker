@@ -1,5 +1,21 @@
 # ItemTracker - TBC Anniversary Edition - Changelog
 
+## v0.5.1
+
+### Bug Fixes
+
+- **Game freeze on last boss loot** — `CreateLootToast` had an infinite `while` loop: when max visible toasts was reached, `fadeOut:Play()` was async and never reduced the count, spinning forever and freezing the client; now immediately releases oldest toasts
+- **Duplicate toasts and history entries for rolled items** — after a roll finished, the subsequent "receives loot" chat message bypassed the active-roll filter (only checked unfinished rolls) and created a second toast and history entry; now includes recently-finished rolls in the filter
+- **Event bus error isolation** — a Lua error in one event subscriber (custom or WoW) no longer breaks the entire event chain; both `EventBus:Fire()` and the WoW event dispatcher now wrap callbacks in `pcall`
+
+### Improvements
+
+- **RollTracker rewritten to use `C_LootHistory` API** — replaced fragile locale-dependent chat message parsing with structured WoW API calls; `LOOT_HISTORY_ROLL_CHANGED` for individual roll updates, `LOOT_ROLLS_COMPLETE` / `LOOT_HISTORY_ROLL_COMPLETE` for definitive winner detection; eliminates all regex patterns and the `CANCEL_LOOT_ROLL` grace period hack
+- **Safety timeout via `GetLootRollTimeLeft` polling** — replaces the 5-second `CANCEL_LOOT_ROLL` delay; polls only while rolls are active, finishes stuck rolls after a 3-second grace period
+- **Pre-populated rolls shown on toast creation** — roll toasts now display pre-existing roll entries (e.g. LootReserve reserves) immediately, instead of waiting for the next `ROLL_UPDATE`
+
+---
+
 ## v0.5.0
 
 ### New Features
