@@ -778,6 +778,13 @@ function GG:ClearDedup(reason)
     IT:Debug("GearGoals: dedup cleared (" .. tostring(reason) .. ")")
 end
 
+--- Drop a single itemID from the dedup set so a repeat drop can fire a
+--- popup again without leaving the group / changing zone. Used by the
+--- /kit drop diagnostic so the same simulated drop can be replayed.
+function GG:ClearSeen(itemID)
+    if itemID then state.dedupSeen[itemID] = nil end
+end
+
 -- ============================================================================
 -- Seen-items cache (persistent, used by autocomplete in the add dialog)
 -- ============================================================================

@@ -394,6 +394,126 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
                 end
             end
         end
+    elseif msg:match("^which") then
+        -- Diagnostic: explain *why* a given itemID would (or wouldn't) trigger
+        -- a GEAR_GOAL_DROPPED popup. Lists every goal on this character that
+        -- the dropped item matches — directly, or through token redemption —
+        -- with the phase-eligibility flag so a "false positive" notification
+        -- can be traced back to the actual offending wishlist entry.
+        local arg = msg:match("^which%s+(.+)$")
+        local itemID = arg and (tonumber(arg) or tonumber(arg:match("item:(%d+)")))
+        local GG = IT.GearGoals
+        local Tokens = IT.GearGoalsTokens
+        if not itemID then
+            IT:Print("Usage: /kit which <itemID or item link>", IT.Colors.warning)
+        elseif not (GG and GG.FindAllMatches) then
+            IT:Print("GearGoals not initialized.", IT.Colors.warning)
+        else
+            local name = GetItemInfo(itemID) or ("Item " .. itemID)
+            local currentPhase = GG:GetCurrentPhase()
+            IT:Print(string.format("Why does %s (id %d) trigger a popup?", name, itemID), IT.Colors.highlight)
+            IT:Print("Current phase: " .. currentPhase .. " (notifications fire for current + pre-raid only)", IT.Colors.info)
+            local found = false
+            local function dump(label, m, goalID)
+                found = true
+                local goalName = GetItemInfo(goalID) or ("Item " .. goalID)
+                local lname = (GG.GetLoadoutName and GG:GetLoadoutName(m.specKey)) or m.specKey
+                local plabel = (GG.PHASE_LABEL and GG.PHASE_LABEL[m.phase]) or m.phase
+                local eligible = (m.phase == currentPhase) or (m.phase == "pre-raid")
+                IT:Print(string.format("  %s %s [%s, %s, rank #%d]  %s",
+                    label, goalName, lname, plabel, m.rank or 0,
+                    eligible and "(notifies)" or "(suppressed: not current phase)"),
+                    IT.Colors.info)
+            end
+            for _, m in ipairs(GG:FindAllMatches(itemID)) do
+                dump("Direct:", m, itemID)
+            end
+            if Tokens and Tokens:IsToken(itemID) then
+                IT:Print("This is a tier-set token — checking redemptions:", IT.Colors.info)
+                for _, m in ipairs(GG:FindAllMatchesForToken(itemID)) do
+                    dump("Token redeems for:", m, m.goal and m.goal.itemID or 0)
+                end
+            end
+            if not found then
+                IT:Print("  No matches on any loadout / phase. Popup would NOT fire.", IT.Colors.success)
+            end
+        end
+    elseif msg:match("^drop") then
+        -- Push an item through the real LootDetector → GearGoalsDetector
+        -- pipeline so we can confirm whether matching fires for a given ID.
+        -- Unlike /kit test bisdrop (which fires a synthetic GEAR_GOAL_DROPPED
+        -- with hardcoded matches), this path actually walks goals + token
+        -- redemptions, so a popup here means the matching code agrees with
+        -- the real-drop case.
+        local arg = msg:match("^drop%s+(.+)$")
+        local itemID = arg and (tonumber(arg) or tonumber(arg:match("item:(%d+)")))
+        if not itemID then
+            IT:Print("Usage: /kit drop <itemID or item link>", IT.Colors.warning)
+        else
+            local name, link, quality, _, _, _, _, _, _, icon = GetItemInfo(itemID)
+            if not name then
+                IT:Print("Item " .. itemID .. " is not cached — open its tooltip in-game first, then retry.", IT.Colors.warning)
+            else
+                if IT.GearGoals and IT.GearGoals.ClearSeen then
+                    IT.GearGoals:ClearSeen(itemID)
+                end
+                IT:Print("Simulating drop of " .. (link or name) .. " (id " .. itemID .. ")", IT.Colors.info)
+                IT.Events:Fire("ITEM_LOOTED", {
+                    itemLink    = link or name,
+                    itemID      = itemID,
+                    quality     = quality or 4,
+                    count       = 1,
+                    player      = UnitName("player"),
+                    isSelf      = true,
+                    isGroupLoot = false,
+                    timestamp   = time(),
+                    icon        = icon,
+                })
+            end
+        end
+    elseif msg == "dump" then
+        -- Brute-force diagnostic: dump every goal on this character, with
+        -- the token each goal item resolves to (if any). Use this when
+        -- /kit which says no matches but a popup fired — the offending
+        -- entry will show up here even if Tokens:GetTokenFor returns nil
+        -- for it (the line will just have an empty token column).
+        local GG = IT.GearGoals
+        local Tokens = IT.GearGoalsTokens
+        if not (GG and IT.charDB and IT.charDB.goals) then
+            IT:Print("GearGoals not initialized or no goals stored.", IT.Colors.warning)
+        else
+            local total = 0
+            for loadoutID, byPhase in pairs(IT.charDB.goals) do
+                local lname = (GG.GetLoadoutName and GG:GetLoadoutName(loadoutID)) or loadoutID
+                IT:Print("Loadout: " .. lname, IT.Colors.highlight)
+                for phase, bySlot in pairs(byPhase) do
+                    local plabel = (GG.PHASE_LABEL and GG.PHASE_LABEL[phase]) or phase
+                    local rows = {}
+                    for slotID, goals in pairs(bySlot) do
+                        for _, g in ipairs(goals) do
+                            total = total + 1
+                            local name = (g.itemID and GetItemInfo(g.itemID)) or ("Item " .. tostring(g.itemID))
+                            local tokenID = Tokens and Tokens.GetTokenFor and Tokens:GetTokenFor(g.itemID)
+                            local tokenStr = tokenID
+                                and string.format("  → token %s (%d)",
+                                    Tokens:GetSourceTokenLabel(tokenID), tokenID)
+                                or ""
+                            table.insert(rows, string.format("    [slot %d #%d]  %s (%d)%s",
+                                slotID, g.rank or 0, name, g.itemID or 0, tokenStr))
+                        end
+                    end
+                    if #rows > 0 then
+                        IT:Print("  Phase " .. plabel .. ":", IT.Colors.info)
+                        for _, r in ipairs(rows) do IT:Print(r, IT.Colors.info) end
+                    end
+                end
+            end
+            if total == 0 then
+                IT:Print("No goals stored on this character.", IT.Colors.info)
+            else
+                IT:Print(string.format("Total: %d goals across all loadouts.", total), IT.Colors.success)
+            end
+        end
     elseif msg == "status" then
         IT:Print("Addon: " .. (IT.db.settings.enabled and "ON" or "OFF"), IT.Colors.info)
         IT:Print("RCLootCouncil: " .. (IT.RCLCIntegration and IT.RCLCIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
@@ -415,6 +535,9 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("  /kit debug        - Toggle debug mode", IT.Colors.info)
         IT:Print("  /kit version      - Show version", IT.Colors.info)
         IT:Print("  /kit test         - List UI smoke-test simulators", IT.Colors.info)
+        IT:Print("  /kit which <id>   - Explain why an item would trigger a popup", IT.Colors.info)
+        IT:Print("  /kit dump         - Dump every goal on this character (item + resolved token)", IT.Colors.info)
+        IT:Print("  /kit drop <id>    - Push an itemID through the real detector pipeline", IT.Colors.info)
     end
 end
 
