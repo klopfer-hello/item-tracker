@@ -367,20 +367,33 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
             IT.GoldTracker:Reset()
         end
         IT:Print("Loot history and session gold cleared.", IT.Colors.success)
-    elseif msg == "test" then
-        IT:FireTestLoot()
-    elseif msg == "test gold" then
-        IT:FireTestGold()
-    elseif msg == "test roll" then
-        IT:FireTestRoll()
-    elseif msg == "test lc" then
-        IT:FireTestLC()
-    elseif msg == "test reserve" then
-        IT:FireTestReserve()
-    elseif msg == "test gear" then
-        IT:FireTestGearGoal()
-    elseif msg == "test token" then
-        IT:FireTestGearGoalToken()
+    elseif msg == "test" or msg:match("^test ") then
+        -- Bare /kit test prints the menu instead of firing a random simulator,
+        -- so the user can discover what's testable without guessing.
+        local TEST_DISPATCH = {
+            loot    = { fn = function() IT:FireTestLoot()           end, desc = "Fake loot drop toast"                  },
+            gold    = { fn = function() IT:FireTestGold()           end, desc = "Fake gold drop toast"                  },
+            roll    = { fn = function() IT:FireTestRoll()           end, desc = "Fake group roll (Need / Greed / Pass)" },
+            council = { fn = function() IT:FireTestLC()             end, desc = "Fake RCLootCouncil session"            },
+            reserve = { fn = function() IT:FireTestReserve()        end, desc = "Fake LootReserve roll"                 },
+            bisdrop = { fn = function() IT:FireTestGearGoal()       end, desc = "Fake BiS drop popup"                   },
+            token   = { fn = function() IT:FireTestGearGoalToken()  end, desc = "Fake tier-token drop with redemption"  },
+        }
+        local TEST_ORDER = { "loot", "gold", "roll", "council", "reserve", "bisdrop", "token" }
+        local sub = msg:match("^test%s+(.+)$")
+        local entry = sub and TEST_DISPATCH[sub]
+        if entry then
+            entry.fn()
+        else
+            if sub then
+                IT:Print("Unknown test '" .. sub .. "'. Try /kit test for the list.", IT.Colors.warning)
+            else
+                IT:Print("Test simulators (UI smoke tests):", IT.Colors.highlight)
+                for _, key in ipairs(TEST_ORDER) do
+                    IT:Print(string.format("  /kit test %-8s - %s", key, TEST_DISPATCH[key].desc), IT.Colors.info)
+                end
+            end
+        end
     elseif msg == "status" then
         IT:Print("Addon: " .. (IT.db.settings.enabled and "ON" or "OFF"), IT.Colors.info)
         IT:Print("RCLootCouncil: " .. (IT.RCLCIntegration and IT.RCLCIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
@@ -401,7 +414,7 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("  /kit clear        - Clear loot history and session gold", IT.Colors.info)
         IT:Print("  /kit debug        - Toggle debug mode", IT.Colors.info)
         IT:Print("  /kit version      - Show version", IT.Colors.info)
-        IT:Print("  /kit test [gold|roll|lc|reserve|gear|token] - Simulate events", IT.Colors.info)
+        IT:Print("  /kit test         - List UI smoke-test simulators", IT.Colors.info)
     end
 end
 
