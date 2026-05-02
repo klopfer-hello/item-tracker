@@ -1,4 +1,29 @@
-# ItemTracker - TBC Anniversary Edition - Changelog
+# Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
+
+## Unreleased
+
+### New Features
+
+- **Klopfer's Item Tracker rebrand** — TOC title, panel headers, anchor bar, minimap tooltip, and chat output (now prefixed `[KIT]`) all read the new brand. Internal API tags (`"ItemTracker"` listener name on LootReserve, Auctionator query tag) stay for back-compat. New primary slash `/kit`; `/it` and `/itemtracker` are aliases
+- **Settings live in the WoW Interface AddOns pane** — the standalone settings window has been retired. Esc → Interface → AddOns → Klopfer's Item Tracker uses the modern `Settings.RegisterAddOnSetting` + `CreateCheckbox` / `CreateSlider` / `CreateDropdown` flow (Molinari-style native widgets). The GearGoals sub-category nests beneath it; phase selector is a row of numbered buttons matching TBCA_BIS
+- **Unified loot log** — the legacy "Loot History" pop-out is gone. The LOOT LOG tab inside the Gear Tracker is the single source-of-truth view, with an ALL / WISHLIST scope toggle (default ALL), a quality dropdown, and shared name / player search. Anchor bar, minimap, and LDB clicks all route there
+- **GearGoals drop popup animations** — 0.3s alpha fade-in on Show plus a sine-wave alpha pulse on the corner brackets while the popup is awaiting input. Gated by a new `popupAnimations` setting in the GearGoals sub-pane
+- **Persistent bank ownership cache** — `ScanBagsForItemID` was only walking carried bags, so items stored in the bank read as TARGET on every login. The bank is now snapshotted into `ItemTrackerCharDB.bankItems` whenever the bank UI is visible (`BANKFRAME_OPENED` + `PLAYERBANKSLOTS_CHANGED` + filtered `BAG_UPDATE`); the snapshot survives logout, `/reload`, and travel away from the banker, so OWNED status is durable
+
+### Improvements
+
+- **Single dark/gold visual identity** — the cyan/glassy palette in the toast bar, anchor bar, and roll panel has been replaced with the same dark/gold palette as the Gear Tracker. Palette + frame helpers live in a new shared `modules/Theme.lua` (`Theme.P`, `SetColor`, `AddBackground`, `AddBorder`); no `BackdropTemplate` calls remain in the addon's code
+- **Slash dispatcher trimmed** — every UI-redundant branch (`config`, `options`, `history`, `phase X`, `gear copy`, `gear import bis`, `gear unsourced`, `gear atlasloot-stats`, `reset`) has been removed in favour of UI interactions. What stays is what's actually faster as CLI: `status`, `clear`, `debug`, `version`, and the `test …` simulation harness
+- **`/kit test` is discoverable** — bare `/kit test` now prints the menu of available simulators instead of silently firing a random loot toast. Subcommands renamed for clarity: `lc` → `council`, `gear` → `bisdrop`. Unknown subcommands print a friendly hint pointing back at the menu
+- **Click bindings rationalised** — minimap left-click toggles the Gear Tracker (LOADOUT default), shift-click jumps to the LOOT LOG tab. LDB DataText left-click toggles the Gear Tracker, shift-click opens LOOT LOG, right-click stays on Reset session. Settings access is exclusively via Esc → Interface → AddOns; the redundant right-click → Settings shortcuts (and their tooltip lines) are gone
+
+### Bug Fixes
+
+- **Toast icons rendered as blank gold squares** — the dark/gold restyle replaced the icon's neutral grey overlay with a solid gold rectangle at near-full alpha sitting on top of the icon. Switched to the iconHolder + AddBorder pattern GearGoalsUI uses, so the icon stays fully visible inside a thin gold frame
+- **Bank items dropped to TARGET on bank close** — the close-time rescan was firing 0.2s after `BANKFRAME_CLOSED`, by which point `GetContainerItemLink` returned nil for every bank slot and wiped the cache. `RescanBankToCache` now bails when the bank is closed, and the close-time rescan was dropped (the open-time + slot-change rescans already kept the cache in sync with every move)
+- **Settings panel didn't appear in the Interface pane** — TBC Anniversary 2.5.5 silently ignores `InterfaceOptions_AddCategory` registrations. Migrated to `Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, exposing the parent category to GearGoalsConfig so it nests as a `Settings.RegisterCanvasLayoutSubcategory` underneath
+
+---
 
 ## v0.5.2
 
