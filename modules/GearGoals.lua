@@ -182,6 +182,16 @@ local CHAR_DEFAULTS = {
     loadouts       = nil,
     loadoutCounter = 0,
     goals          = {},        -- [loadoutID][phase][slotID] = { goal, ... }
+
+    -- Persistent snapshot of the player's bank contents as a set of item IDs:
+    --   bankItems = { [itemID] = true, ... }
+    -- Bank slots only return data while the bank UI is open in the current
+    -- session, so without this cache any goal stored in the bank reads as
+    -- TARGET on every login until the player physically visits a banker.
+    -- Rebuilt every time the bank becomes visible (open + bag/slot changes
+    -- while open + bank close), which is fine for BiS-style tracking where
+    -- items are unique pieces.
+    bankItems      = {},
 }
 
 local function DeepDefaults(defaults, target)
@@ -372,6 +382,10 @@ local state = {
     -- track group/instance state for dedup-clear triggers
     wasInGroup    = nil,
     lastInstance  = nil,
+
+    -- bank cache state (RescanBankToCache populates IT.charDB.bankItems)
+    bankOpen          = false,
+    bankRescanPending = false,
 }
 GG._state = state
 
@@ -610,16 +624,90 @@ GG.STATUS = {
     COVERED  = "COVERED",   -- a higher-rank pick in this slot is owned/equipped
 }
 
+-- Bag scan: live for what's currently readable (backpack + carried bags),
+-- plus a persistent snapshot of the bank read from charDB. The bank snapshot
+-- is rebuilt by RescanBankToCache whenever the bank is visible (see the bank
+-- event handlers in Initialize). This means goals stored in the bank are
+-- counted as OWNED even when the player is nowhere near a banker.
 local function ScanBagsForItemID(itemID)
     if not GetContainerNumSlots then return false end
-    for bag = 0, NUM_BAG_SLOTS or 4 do
+
+    local function scanBag(bag)
         local slots = GetContainerNumSlots(bag) or 0
         for slot = 1, slots do
             local link = GetContainerItemLink(bag, slot)
             if link and ItemIDFromLink(link) == itemID then return true end
         end
+        return false
     end
+
+    -- Live carried bags (always readable)
+    for bag = 0, (NUM_BAG_SLOTS or 4) do
+        if scanBag(bag) then return true end
+    end
+
+    -- While the bank is currently open, prefer a live read — it covers the
+    -- brief window between BANKFRAME_OPENED and the first throttled rescan,
+    -- and it acts as a safety net if the cache is somehow stale.
+    if state.bankOpen then
+        if scanBag(BANK_CONTAINER or -1) then return true end
+        local first = (NUM_BAG_SLOTS or 4) + 1
+        local last  = (NUM_BAG_SLOTS or 4) + (NUM_BANKBAGSLOTS or 7)
+        for bag = first, last do
+            if scanBag(bag) then return true end
+        end
+    end
+
+    -- Persistent bank snapshot — populated on each bank visit, survives logout.
+    local bank = IT.charDB and IT.charDB.bankItems
+    if bank and bank[itemID] then return true end
+
     return false
+end
+
+--- Walk every bank slot we can reach and rebuild charDB.bankItems from
+--- scratch. Cheap (~140 GetContainerItemLink calls worst case) and only
+--- runs while the bank is visible, so the cost is bounded to actual bank
+--- visits rather than every login or refresh.
+---
+--- The state.bankOpen guard is critical: a throttled rescan scheduled while
+--- the bank was open can fire 0.2s later when the bank has already closed,
+--- at which point GetContainerItemLink returns nil for bank slots and we
+--- would otherwise wipe the cache to an empty table.
+local function RescanBankToCache()
+    if not IT.charDB or not GetContainerNumSlots then return end
+    if not state.bankOpen then return end
+
+    local cache = {}
+    local function scanBag(bag)
+        local slots = GetContainerNumSlots(bag) or 0
+        for slot = 1, slots do
+            local link = GetContainerItemLink(bag, slot)
+            local id   = link and ItemIDFromLink(link)
+            if id then cache[id] = true end
+        end
+    end
+
+    scanBag(BANK_CONTAINER or -1)
+    local firstBankBag = (NUM_BAG_SLOTS or 4) + 1
+    local lastBankBag  = (NUM_BAG_SLOTS or 4) + (NUM_BANKBAGSLOTS or 7)
+    for bag = firstBankBag, lastBankBag do
+        scanBag(bag)
+    end
+
+    IT.charDB.bankItems = cache
+    IT.Events:Fire("GEAR_GOAL_LIST_CHANGED")
+end
+
+--- PLAYERBANKSLOTS_CHANGED can fire dozens of times in rapid succession when
+--- the bank first opens (once per slot). Coalesce into a single rescan.
+local function ScheduleBankRescan()
+    if state.bankRescanPending then return end
+    state.bankRescanPending = true
+    C_Timer.After(0.2, function()
+        state.bankRescanPending = false
+        RescanBankToCache()
+    end)
 end
 
 --- Internal: ownership status for a single itemID — EQUIPPED, OWNED, or nil.
@@ -1015,6 +1103,37 @@ function GG:Initialize()
     IT:RegisterEvent("PLAYER_ENTERING_WORLD",   function() GG:ScanEquipped(); CheckGroupAndZoneTransitions() end)
     IT:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", function() GG:ScanEquipped() end)
     IT:RegisterEvent("GROUP_ROSTER_UPDATE",      function() CheckGroupAndZoneTransitions() end)
+
+    -- Bank cache: bank slots only return data while the bank UI is open in
+    -- the current session, so we snapshot the bank into charDB.bankItems
+    -- whenever the bank is visible. After that, the cache stays valid across
+    -- logout, /reload, and travelling away from the banker.
+    IT:RegisterEvent("BANKFRAME_OPENED",        function()
+        state.bankOpen = true
+        ScheduleBankRescan()
+    end)
+    IT:RegisterEvent("BANKFRAME_CLOSED",        function()
+        state.bankOpen = false
+        -- No rescan on close: PLAYERBANKSLOTS_CHANGED / BAG_UPDATE while the
+        -- bank was open already kept the cache in sync with every move, and
+        -- a rescan after this point would read nil from every bank slot and
+        -- wipe the cache.
+        IT.Events:Fire("GEAR_GOAL_LIST_CHANGED")  -- repaint without the live-bank fallback
+    end)
+    IT:RegisterEvent("PLAYERBANKSLOTS_CHANGED", function()
+        if state.bankOpen then ScheduleBankRescan() end
+    end)
+    -- BAG_UPDATE fires for both carried bags (which we don't care about for
+    -- the bank cache) and bank bags (which we do, but only while the bank UI
+    -- is open). Filter to bank bag IDs to avoid pointless rescans on every
+    -- backpack change.
+    IT:RegisterEvent("BAG_UPDATE", function(bag)
+        if not state.bankOpen then return end
+        if bag == (BANK_CONTAINER or -1) then ScheduleBankRescan(); return end
+        local first = (NUM_BAG_SLOTS or 4) + 1
+        local last  = (NUM_BAG_SLOTS or 4) + (NUM_BANKBAGSLOTS or 7)
+        if bag >= first and bag <= last then ScheduleBankRescan() end
+    end)
 
     IT:Debug("GearGoals initialized")
 end
