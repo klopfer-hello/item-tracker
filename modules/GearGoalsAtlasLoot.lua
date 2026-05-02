@@ -408,6 +408,72 @@ local function specsForPlayerClass()
     return out
 end
 
+--- Return the list of TBCA spec keys for the player's current class —
+--- e.g. for a Shaman: { "ShamanElemental", "ShamanEnhancement",
+--- "ShamanRestoration" }. Returns an empty list when TBCA_BIS isn't
+--- loaded or the class isn't represented.
+function AL:GetTBCASpecsForClass()
+    return specsForPlayerClass()
+end
+
+--- Read the top-N curated BiS itemIDs for a specific TBCA spec key, phase,
+--- and inventory slot. Items appear in the plugin's rank order (best first).
+--- `tbcaSpec` is a key like "ShamanRestoration" (use GetTBCASpecsForClass()
+--- to discover valid keys for the player). `topN` defaults to 5.
+function AL:GetBiSItemsForSpec(tbcaSpec, phase, slotID, topN)
+    topN = topN or 5
+    local diff = PHASE_TO_DIFF[phase]
+    if not diff then return nil end
+    local tbcaSlotKeys = SLOT_TO_TBCA_KEYS[slotID]
+    if not tbcaSlotKeys then return nil end
+    local store = tbcaStorage()
+    if not store then return nil end
+
+    local entry = store[tbcaSpec]
+    if not entry or type(entry.items) ~= "table" then return nil end
+
+    local tuples = {}
+    local ok, err = pcall(function()
+        for _, slotEntry in ipairs(entry.items) do
+            if type(slotEntry) == "table" and slotEntry.name then
+                local matches = false
+                for _, wantKey in ipairs(tbcaSlotKeys) do
+                    if slotEntry.name == wantKey then matches = true; break end
+                end
+                if matches then
+                    local diffBucket = slotEntry[diff]
+                    if type(diffBucket) == "table" then
+                        for _, pair in ipairs(diffBucket) do
+                            if type(pair) == "table"
+                               and type(pair[1]) == "number"
+                               and type(pair[2]) == "number" then
+                                table.insert(tuples, { rank = pair[1], itemID = pair[2] })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if not ok then
+        IT:Debug("TBCA_BIS GetBiSItemsForSpec error: " .. tostring(err))
+        return nil
+    end
+    if #tuples == 0 then return nil end
+
+    table.sort(tuples, function(a, b) return a.rank < b.rank end)
+
+    local out, seen = {}, {}
+    for _, t in ipairs(tuples) do
+        if not seen[t.itemID] then
+            seen[t.itemID] = true
+            table.insert(out, t.itemID)
+            if #out >= topN then break end
+        end
+    end
+    return out
+end
+
 --- Return an array of itemIDs ranked-then-deduplicated for the given INV
 --- slot at `phase`. Walks every TBCA spec for the player's class and unions
 --- their picks. Returns nil if TBCA_BIS isn't available or the slot/phase

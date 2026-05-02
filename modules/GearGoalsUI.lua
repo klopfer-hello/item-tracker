@@ -572,7 +572,7 @@ local function BuildSidebar(parent, anchorTo)
     end)
     cursor = s.setCurrentBtn
 
-    -- ── PHASE ACTIONS ── ("Copy from <previous phase>") ─────────────────
+    -- ── PHASE ACTIONS ── ("Copy from <previous phase>", Import / Export) ─
     s.phaseActionsLabel = anchorBelow(makeLabel("PHASE ACTIONS"), cursor)
 
     s.copyPhaseBtn = CreateFrame("Button", nil, s)
@@ -586,6 +586,35 @@ local function BuildSidebar(parent, anchorTo)
     s.copyPhaseBtn:SetScript("OnEnter", function(self) SetColor(self.bg, P.accentDim) end)
     s.copyPhaseBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
     s.copyPhaseBtn:SetScript("OnClick", function() UI:RequestPhaseCopy() end)
+
+    -- Import BiS + Export side-by-side, half width each.
+    local halfW = (SIDEBAR_W - 28 - 4) / 2
+
+    s.importBisBtn = CreateFrame("Button", nil, s)
+    s.importBisBtn:SetSize(halfW, 24)
+    anchorBelow(s.importBisBtn, s.copyPhaseBtn, SIDEBAR_GAP_INTRA)
+    s.importBisBtn.bg = AddBackground(s.importBisBtn, P.surfaceAlt)
+    AddBorder(s.importBisBtn, P.border)
+    s.importBisBtn.text = s.importBisBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    s.importBisBtn.text:SetPoint("CENTER")
+    s.importBisBtn.text:SetText("Import")
+    s.importBisBtn.text:SetTextColor(unpack(P.value))
+    s.importBisBtn:SetScript("OnEnter", function(self) SetColor(self.bg, { 0.16, 0.16, 0.20, 1 }) end)
+    s.importBisBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
+    s.importBisBtn:SetScript("OnClick", function() UI:OpenImportBiSDialog() end)
+
+    s.exportBtn = CreateFrame("Button", nil, s)
+    s.exportBtn:SetSize(halfW, 24)
+    s.exportBtn:SetPoint("TOPLEFT", s.importBisBtn, "TOPRIGHT", 4, 0)
+    s.exportBtn.bg = AddBackground(s.exportBtn, P.surfaceAlt)
+    AddBorder(s.exportBtn, P.border)
+    s.exportBtn.text = s.exportBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    s.exportBtn.text:SetPoint("CENTER")
+    s.exportBtn.text:SetText("Export")
+    s.exportBtn.text:SetTextColor(unpack(P.value))
+    s.exportBtn:SetScript("OnEnter", function(self) SetColor(self.bg, { 0.16, 0.16, 0.20, 1 }) end)
+    s.exportBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
+    s.exportBtn:SetScript("OnClick", function() UI:OpenExportDialog() end)
 
     return s
 end
@@ -1880,6 +1909,418 @@ function UI:RequestPhaseCopy()
     else
         doCopy()
     end
+end
+
+-- ============================================================================
+-- Import BiS (TBCA_BIS plugin) and Export dialogs
+-- ============================================================================
+
+local importDialog
+local importState = { source = "tbca", spec = nil, mode = "merge", string = "" }
+local IMPORT_TOP_N = 3
+
+local function BuildImportDialog(parent)
+    local d = CreateFrame("Frame", "ItemTrackerGearGoalsImportDialog", parent)
+    d:SetFrameStrata("DIALOG")
+    d:SetSize(420, 340)
+    d:SetPoint("CENTER")
+    d:Hide()
+
+    AddBackground(d, P.bg)
+    local inner = CreateFrame("Frame", nil, d)
+    inner:SetPoint("TOPLEFT", 6, -6)
+    inner:SetPoint("BOTTOMRIGHT", -6, 6)
+    AddBackground(inner, P.surface)
+    AddBorder(inner, P.borderGold)
+
+    d.title = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    d.title:SetPoint("TOP", 0, -10)
+    d.title:SetTextColor(unpack(P.accent))
+    d.title:SetText("Import")
+
+    -- Source toggle row (top): TBCA vs paste-string
+    local function MakeSourceBtn(label, source, x)
+        local b = CreateFrame("Button", nil, inner)
+        b:SetSize(190, 24)
+        b:SetPoint("TOPLEFT", x, -42)
+        b.bg = AddBackground(b, P.surfaceAlt)
+        AddBorder(b, P.border)
+        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(label)
+        b.text:SetTextColor(unpack(P.value))
+        b.source = source
+        b:SetScript("OnClick", function()
+            importState.source = source
+            UI:RepaintImportDialog()
+        end)
+        return b
+    end
+    d.tbcaBtn   = MakeSourceBtn("From AtlasLoot",   "tbca",   16)
+    d.stringBtn = MakeSourceBtn("From paste",       "string", 212)
+
+    -- ── TBCA-mode content ──────────────────────────────────────────────
+    d.tbcaSection = CreateFrame("Frame", nil, inner)
+    d.tbcaSection:SetPoint("TOPLEFT",  16, -78)
+    d.tbcaSection:SetPoint("TOPRIGHT", -16, -78)
+    d.tbcaSection:SetHeight(110)
+
+    d.specLabel = d.tbcaSection:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.specLabel:SetPoint("TOPLEFT", 0, 0)
+    d.specLabel:SetText("Spec")
+    d.specLabel:SetTextColor(unpack(P.label))
+
+    d.specBtn = CreateFrame("Button", nil, d.tbcaSection)
+    d.specBtn:SetPoint("TOPLEFT", 0, -16)
+    d.specBtn:SetPoint("RIGHT")
+    d.specBtn:SetHeight(26)
+    d.specBtn.bg = AddBackground(d.specBtn, P.surfaceAlt)
+    AddBorder(d.specBtn, P.border)
+    d.specBtn.text = d.specBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.specBtn.text:SetPoint("LEFT", 8, 0)
+    d.specBtn.text:SetTextColor(unpack(P.value))
+    d.specBtn.cycleHint = d.specBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.specBtn.cycleHint:SetPoint("RIGHT", -8, 0)
+    d.specBtn.cycleHint:SetText("<>")
+    d.specBtn.cycleHint:SetTextColor(unpack(P.label))
+    d.specBtn:SetScript("OnEnter", function(self) SetColor(self.bg, { 0.16, 0.16, 0.20, 1 }) end)
+    d.specBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
+    d.specBtn:SetScript("OnClick", function() UI:CycleImportSpec() end)
+
+    d.tbcaHint = d.tbcaSection:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.tbcaHint:SetPoint("TOPLEFT", 0, -54)
+    d.tbcaHint:SetWidth(380)
+    d.tbcaHint:SetJustifyH("LEFT")
+    d.tbcaHint:SetText(string.format(
+        "Top %d BiS picks per slot will be added.", IMPORT_TOP_N))
+    d.tbcaHint:SetTextColor(unpack(P.label))
+
+    -- ── String-mode content ───────────────────────────────────────────
+    d.stringSection = CreateFrame("Frame", nil, inner)
+    d.stringSection:SetPoint("TOPLEFT",  16, -78)
+    d.stringSection:SetPoint("TOPRIGHT", -16, -78)
+    d.stringSection:SetHeight(110)
+
+    d.stringLabel = d.stringSection:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.stringLabel:SetPoint("TOPLEFT", 0, 0)
+    d.stringLabel:SetText("Paste exported string")
+    d.stringLabel:SetTextColor(unpack(P.label))
+
+    local stringScroll = CreateFrame("ScrollFrame", nil, d.stringSection, "UIPanelScrollFrameTemplate")
+    stringScroll:SetPoint("TOPLEFT",  0, -18)
+    stringScroll:SetPoint("BOTTOMRIGHT", -22, 24)
+    AddBackground(stringScroll, P.surfaceAlt)
+    AddBorder(stringScroll, P.border)
+    d.stringScroll = stringScroll
+
+    d.stringEdit = CreateFrame("EditBox", nil, stringScroll)
+    d.stringEdit:SetMultiLine(true)
+    d.stringEdit:SetFontObject("ChatFontNormal")
+    d.stringEdit:SetWidth(360)
+    d.stringEdit:SetHeight(64)
+    d.stringEdit:SetAutoFocus(false)
+    d.stringEdit:SetTextColor(unpack(P.value))
+    d.stringEdit:SetScript("OnEscapePressed", function() d:Hide() end)
+    d.stringEdit:SetScript("OnTextChanged", function(self) UI:RepaintImportDialog() end)
+    stringScroll:SetScrollChild(d.stringEdit)
+
+    d.stringPreview = d.stringSection:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.stringPreview:SetPoint("BOTTOMLEFT", 0, 0)
+    d.stringPreview:SetPoint("BOTTOMRIGHT", 0, 0)
+    d.stringPreview:SetJustifyH("LEFT")
+    d.stringPreview:SetTextColor(unpack(P.label))
+
+    -- ── Mode toggle (shared across both source modes) ─────────────────
+    d.modeLabel = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.modeLabel:SetPoint("TOPLEFT", 16, -200)
+    d.modeLabel:SetText("Mode")
+    d.modeLabel:SetTextColor(unpack(P.label))
+
+    local function MakeModeBtn(label, mode, x)
+        local b = CreateFrame("Button", nil, inner)
+        b:SetSize(190, 24)
+        b:SetPoint("TOPLEFT", x, -218)
+        b.bg = AddBackground(b, P.surfaceAlt)
+        AddBorder(b, P.border)
+        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(label)
+        b.text:SetTextColor(unpack(P.value))
+        b.mode = mode
+        b:SetScript("OnClick", function()
+            importState.mode = mode
+            UI:RepaintImportDialog()
+        end)
+        return b
+    end
+    d.mergeBtn     = MakeModeBtn("Merge",     "merge",     16)
+    d.overwriteBtn = MakeModeBtn("Overwrite", "overwrite", 212)
+
+    -- Error / status line above the buttons
+    d.errorText = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.errorText:SetPoint("BOTTOMLEFT",  16, 44)
+    d.errorText:SetPoint("BOTTOMRIGHT", -16, 44)
+    d.errorText:SetJustifyH("LEFT")
+    d.errorText:SetTextColor(unpack(P.target))
+
+    -- Bottom row buttons
+    local function MakeBtn(label, anchor, x)
+        local b = CreateFrame("Button", nil, inner)
+        b:SetSize(110, 24)
+        b:SetPoint("BOTTOM" .. anchor, x, 10)
+        AddBackground(b, P.surfaceAlt)
+        AddBorder(b, P.border)
+        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(label)
+        b.text:SetTextColor(unpack(P.value))
+        return b
+    end
+    d.importBtn = MakeBtn("Import", "RIGHT", -16)
+    d.cancelBtn = MakeBtn("Cancel", "LEFT", 16)
+    d.importBtn:SetScript("OnClick", function() UI:ConfirmImport() end)
+    d.cancelBtn:SetScript("OnClick", function() d:Hide() end)
+    return d
+end
+
+--- Re-paint every dynamic surface on the import dialog: source toggle,
+--- mode toggle, spec name, and the live preview for the paste-string mode.
+function UI:RepaintImportDialog()
+    if not importDialog then return end
+
+    -- Source toggle: highlight active button + show/hide section
+    for _, b in ipairs({ importDialog.tbcaBtn, importDialog.stringBtn }) do
+        if b.source == importState.source then
+            SetColor(b.bg, P.accentDim)
+            b.text:SetTextColor(unpack(P.accent))
+        else
+            SetColor(b.bg, P.surfaceAlt)
+            b.text:SetTextColor(unpack(P.value))
+        end
+    end
+    importDialog.tbcaSection:SetShown(importState.source == "tbca")
+    importDialog.stringSection:SetShown(importState.source == "string")
+
+    -- Spec cycle button
+    importDialog.specBtn.text:SetText(importState.spec or "?")
+
+    -- Mode toggle highlight
+    for _, b in ipairs({ importDialog.mergeBtn, importDialog.overwriteBtn }) do
+        if b.mode == importState.mode then
+            SetColor(b.bg, P.accentDim)
+            b.text:SetTextColor(unpack(P.accent))
+        else
+            SetColor(b.bg, P.surfaceAlt)
+            b.text:SetTextColor(unpack(P.value))
+        end
+    end
+
+    -- Paste-string preview: parse on every keystroke so the user sees
+    -- "valid: <name> · <phase>, N picks" or an error before clicking Import.
+    if importState.source == "string" then
+        local raw = importDialog.stringEdit:GetText() or ""
+        if raw:gsub("%s+", "") == "" then
+            importDialog.stringPreview:SetText("")
+            importDialog.stringPreview:SetTextColor(unpack(P.label))
+        else
+            local decoded, err = IT.GearGoals:DecodePhase(raw)
+            if decoded then
+                local count = 0
+                for _, picks in pairs(decoded.slots or {}) do count = count + #picks end
+                local viewedPhase = IT.GearGoals:GetViewedPhase()
+                local phaseLabel  = IT.GearGoals.PHASE_LABEL[viewedPhase] or viewedPhase
+                local sourceLabel = IT.GearGoals.PHASE_LABEL[decoded.phase] or decoded.phase
+                local destNote
+                if decoded.phase == viewedPhase then
+                    destNote = ""
+                else
+                    destNote = string.format(" . importing into %s (current view)", phaseLabel)
+                end
+                importDialog.stringPreview:SetText(string.format(
+                    "Looks valid: %s . %s, %d pick%s%s",
+                    decoded.name, sourceLabel, count,
+                    count == 1 and "" or "s", destNote))
+                importDialog.stringPreview:SetTextColor(unpack(P.success))
+            else
+                importDialog.stringPreview:SetText("Doesn't parse: " .. (err or "?"))
+                importDialog.stringPreview:SetTextColor(unpack(P.target))
+            end
+        end
+    end
+    importDialog.errorText:SetText("")
+end
+
+function UI:OpenImportDialog()
+    if not importDialog then importDialog = BuildImportDialog(frame) end
+
+    -- Default source to TBCA when available; otherwise jump to string.
+    local AL = IT.GearGoalsAtlasLoot
+    local specs = (AL and AL.GetTBCASpecsForClass) and AL:GetTBCASpecsForClass() or {}
+    if importState.source == "tbca" and #specs == 0 then
+        importState.source = "string"
+    end
+    -- Keep last spec selection if valid, else first available
+    if #specs > 0 then
+        local ok = false
+        for _, s in ipairs(specs) do if s == importState.spec then ok = true; break end end
+        if not ok then importState.spec = specs[1] end
+    end
+    importState.mode = importState.mode or "merge"
+
+    importDialog.stringEdit:SetText(importState.string or "")
+    UI:RepaintImportDialog()
+    importDialog:Show()
+end
+
+function UI:CycleImportSpec()
+    local AL = IT.GearGoalsAtlasLoot
+    local specs = (AL and AL.GetTBCASpecsForClass) and AL:GetTBCASpecsForClass() or {}
+    if #specs <= 1 then return end
+    local idx = 1
+    for i, s in ipairs(specs) do if s == importState.spec then idx = i; break end end
+    importState.spec = specs[(idx % #specs) + 1]
+    UI:RepaintImportDialog()
+end
+
+--- Dispatch to the active source. Both paths apply to the *currently viewed*
+--- loadout/phase regardless of any phase recorded inside an exported string.
+function UI:ConfirmImport()
+    if not importDialog or not importDialog:IsShown() then return end
+    local GG        = IT.GearGoals
+    local loadoutID = viewLoadoutID or GG:GetMainLoadoutID()
+    local phase     = GG:GetViewedPhase()
+
+    if importState.source == "tbca" then
+        local AL = IT.GearGoalsAtlasLoot
+        if not AL or not importState.spec then
+            importDialog.errorText:SetText("AtlasLoot TBCA_BIS not available.")
+            return
+        end
+        if importState.mode == "overwrite" and IT.charDB.goals[loadoutID] then
+            IT.charDB.goals[loadoutID][phase] = {}
+        end
+        local added, skipped = 0, 0
+        for _, slotID in ipairs(GG.SLOT_ORDER) do
+            local items = AL:GetBiSItemsForSpec(importState.spec, phase, slotID, IMPORT_TOP_N)
+            if items then
+                for _, itemID in ipairs(items) do
+                    local entry = GG:AddGoal(loadoutID, phase, slotID, itemID)
+                    if entry then added = added + 1 else skipped = skipped + 1 end
+                end
+            end
+        end
+        importDialog:Hide()
+        UI:Refresh()
+        IT:Print(string.format("Imported BiS from %s: %d added, %d skipped.",
+            importState.spec, added, skipped), IT.Colors.success)
+    else
+        -- String source
+        local raw = importDialog.stringEdit:GetText() or ""
+        importState.string = raw   -- remember between dialog opens
+        local decoded, err = GG:DecodePhase(raw)
+        if not decoded then
+            importDialog.errorText:SetText("Couldn't parse: " .. (err or "?"))
+            return
+        end
+        local ok, added, skipped = GG:ApplyDecodedPhase(loadoutID, phase, decoded, importState.mode)
+        if not ok then
+            importDialog.errorText:SetText("Couldn't import: " .. (added or "?"))
+            return
+        end
+        importDialog:Hide()
+        UI:Refresh()
+        IT:Print(string.format("Imported %d picks (%d skipped) into %s.",
+            added, skipped, phase), IT.Colors.success)
+    end
+end
+
+-- Backwards-compat alias for any external callers / older slash branches.
+UI.OpenImportBiSDialog = UI.OpenImportDialog
+UI.ConfirmImportBiS    = UI.ConfirmImport
+
+-- ============================================================================
+-- Export dialog — produces a copy-pasteable text block of the current
+-- loadout's picks for the viewed phase. Round-trip parsing isn't supported
+-- yet (defer to a future polish brief if/when the user asks).
+-- ============================================================================
+
+local exportDialog
+
+local function BuildExportDialog(parent)
+    local d = CreateFrame("Frame", "ItemTrackerGearGoalsExportDialog", parent)
+    d:SetFrameStrata("DIALOG")
+    d:SetSize(440, 420)
+    d:SetPoint("CENTER")
+    d:Hide()
+
+    AddBackground(d, P.bg)
+    local inner = CreateFrame("Frame", nil, d)
+    inner:SetPoint("TOPLEFT", 6, -6)
+    inner:SetPoint("BOTTOMRIGHT", -6, 6)
+    AddBackground(inner, P.surface)
+    AddBorder(inner, P.borderGold)
+
+    d.title = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    d.title:SetPoint("TOP", 0, -10)
+    d.title:SetTextColor(unpack(P.accent))
+
+    d.hint = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.hint:SetPoint("TOP", d.title, "BOTTOM", 0, -4)
+    d.hint:SetText("Press Ctrl+A then Ctrl+C to copy, or click the box first.")
+    d.hint:SetTextColor(unpack(P.label))
+
+    -- ScrollFrame + multi-line EditBox for read-mostly text the user
+    -- highlights and copies out.
+    local sf = CreateFrame("ScrollFrame", "ItemTrackerGearGoalsExportScroll",
+        inner, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT",     16, -56)
+    sf:SetPoint("BOTTOMRIGHT", -36, 56)
+    AddBackground(sf, P.surfaceAlt)
+    AddBorder(sf, P.border)
+
+    local eb = CreateFrame("EditBox", nil, sf)
+    eb:SetMultiLine(true)
+    eb:SetFontObject("ChatFontNormal")
+    eb:SetWidth(380)
+    eb:SetAutoFocus(false)
+    eb:SetTextColor(unpack(P.value))
+    eb:SetScript("OnEscapePressed", function() d:Hide() end)
+    sf:SetScrollChild(eb)
+    d.editBox = eb
+
+    d.closeBtn = CreateFrame("Button", nil, inner)
+    d.closeBtn:SetSize(110, 24)
+    d.closeBtn:SetPoint("BOTTOM", 0, 10)
+    AddBackground(d.closeBtn, P.surfaceAlt)
+    AddBorder(d.closeBtn, P.border)
+    d.closeBtn.text = d.closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.closeBtn.text:SetPoint("CENTER")
+    d.closeBtn.text:SetText("Close")
+    d.closeBtn.text:SetTextColor(unpack(P.value))
+    d.closeBtn:SetScript("OnClick", function() d:Hide() end)
+    return d
+end
+
+function UI:OpenExportDialog()
+    if not exportDialog then exportDialog = BuildExportDialog(frame) end
+
+    local GG          = IT.GearGoals
+    local loadoutID   = viewLoadoutID or GG:GetMainLoadoutID()
+    local phase       = GG:GetViewedPhase()
+    local loadoutName = GG:GetLoadoutName(loadoutID)
+    local phaseLabel  = GG.PHASE_LABEL[phase] or phase
+
+    exportDialog.title:SetText("Export — " .. loadoutName .. " . " .. phaseLabel)
+
+    local encoded = GG:EncodePhase(loadoutID, phase) or ""
+    -- The encoded string is round-trippable via the Import dialog's
+    -- "From paste" source. Keep it as a single line so users can copy
+    -- without worrying about line breaks getting clipped.
+    exportDialog.editBox:SetText(encoded)
+    exportDialog.editBox:SetHeight(280)
+    exportDialog.editBox:HighlightText()
+    exportDialog:Show()
+    exportDialog.editBox:SetFocus()
 end
 
 -- ============================================================================

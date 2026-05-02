@@ -838,6 +838,106 @@ function GG:GetPreviousPhase(phase)
     return nil
 end
 
+-- ============================================================================
+-- Phase encode / decode (for Export + paste-Import)
+--
+-- Wire format: `!GG1!<loadoutName>!<phase>!<slots>`
+--   <slots> = `<slotID>=<itemID>:<rank>,<itemID>:<rank>|<slotID>=...`
+-- The loadout name has its delimiter characters squashed to `_` so the
+-- header parses unambiguously. Phase is the literal phase key.
+-- ============================================================================
+
+local EXPORT_VERSION_TAG = "!GG1!"
+local SAFE_NAME_PATTERN  = "[!|,:=]"
+
+local function escapeName(name)
+    return (name or ""):gsub(SAFE_NAME_PATTERN, "_")
+end
+
+--- Build the export string for a loadout/phase. Returns a string starting
+--- with `!GG1!` so it's easy to recognise when pasted.
+function GG:EncodePhase(loadoutID, phase)
+    if not loadoutID or not phase then return nil end
+    local loadout = self:GetLoadoutByID(loadoutID)
+    local name    = escapeName(loadout and loadout.name or loadoutID)
+
+    local slotChunks = {}
+    for _, slotID in ipairs(GG.SLOT_ORDER) do
+        local goals = self:GetGoals(loadoutID, phase, slotID)
+        if #goals > 0 then
+            local picks = {}
+            for _, g in ipairs(goals) do
+                table.insert(picks, g.itemID .. ":" .. g.rank)
+            end
+            table.insert(slotChunks, slotID .. "=" .. table.concat(picks, ","))
+        end
+    end
+    return EXPORT_VERSION_TAG .. name .. "!" .. phase .. "!" ..
+           table.concat(slotChunks, "|")
+end
+
+--- Parse an export string back into `{ name, phase, slots = { [slotID] = { {itemID, rank}, ... } } }`.
+--- Returns the table on success, or nil + error string on failure. Tolerates
+--- trailing whitespace; rejects strings without the `!GG1!` magic header.
+function GG:DecodePhase(str)
+    if type(str) ~= "string" then return nil, "not a string" end
+    str = str:gsub("^%s+", ""):gsub("%s+$", "")
+    local body = str:match("^!GG1!(.*)$")
+    if not body then return nil, "missing !GG1! header" end
+
+    local name, phase, slotData = body:match("^([^!]+)!([^!]+)!?(.*)$")
+    if not (name and phase) then return nil, "malformed header" end
+
+    local result = { name = name, phase = phase, slots = {} }
+    if slotData and slotData ~= "" then
+        for slotChunk in slotData:gmatch("[^|]+") do
+            local slotID, picksStr = slotChunk:match("^(%d+)=(.+)$")
+            if slotID then
+                slotID = tonumber(slotID)
+                local picks = {}
+                for pick in picksStr:gmatch("[^,]+") do
+                    local itemID, rank = pick:match("^(%d+):(%d+)$")
+                    if itemID and rank then
+                        table.insert(picks, {
+                            itemID = tonumber(itemID),
+                            rank   = tonumber(rank),
+                        })
+                    end
+                end
+                if #picks > 0 then
+                    result.slots[slotID] = picks
+                end
+            end
+        end
+    end
+    return result
+end
+
+--- Apply a decoded phase blob to a loadout/phase.
+--- mode: "merge" (skip duplicates, keep existing) or "overwrite" (clear first).
+--- Returns: ok, added, skipped (or nil + reason).
+function GG:ApplyDecodedPhase(loadoutID, phase, decoded, mode)
+    if not loadoutID or not phase or type(decoded) ~= "table" then
+        return nil, "missing argument"
+    end
+    if mode == "overwrite" then
+        if not IT.charDB.goals then IT.charDB.goals = {} end
+        if not IT.charDB.goals[loadoutID] then IT.charDB.goals[loadoutID] = {} end
+        IT.charDB.goals[loadoutID][phase] = {}
+    end
+    local added, skipped = 0, 0
+    for slotID, picks in pairs(decoded.slots or {}) do
+        for _, p in ipairs(picks) do
+            local entry = self:AddGoal(loadoutID, phase, slotID, p.itemID, { rank = p.rank })
+            if entry then added = added + 1 else skipped = skipped + 1 end
+        end
+    end
+    IT.Events:Fire("GEAR_GOAL_LIST_CHANGED", {
+        loadoutID = loadoutID, phase = phase, reason = "imported",
+    })
+    return true, added, skipped
+end
+
 --- Deep-copy every per-slot goal list from `fromPhase` into `toPhase` for the
 --- given loadout, resetting `obtained=false` on each copy. Overwrites
 --- `toPhase` wholesale. Returns true on success, or false plus an error

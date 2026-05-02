@@ -359,6 +359,47 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
                 IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "), IT.Colors.warning)
             end
         end
+    elseif msg:match("^gear%s+import%s+bis") then
+        local specInput = msg:match("^gear%s+import%s+bis%s+(.+)$")
+        local AL = IT.GearGoalsAtlasLoot
+        local GG = IT.GearGoals
+        if not AL or not GG or not AL.GetTBCASpecsForClass then
+            IT:Print("AtlasLoot TBCA_BIS plugin not available.", IT.Colors.warning)
+        else
+            local specs = AL:GetTBCASpecsForClass()
+            if #specs == 0 then
+                IT:Print("No TBCA_BIS specs found for your class.", IT.Colors.warning)
+            elseif not specInput then
+                IT:Print("Usage: /it gear import bis <SpecName>  (one of: " ..
+                    table.concat(specs, ", ") .. ")", IT.Colors.warning)
+            else
+                local match
+                for _, s in ipairs(specs) do
+                    if s:lower() == specInput:lower() then match = s; break end
+                end
+                if not match then
+                    IT:Print("Unknown spec '" .. specInput .. "'. Available: " ..
+                        table.concat(specs, ", "), IT.Colors.warning)
+                else
+                    local loadoutID = GG:GetMainLoadoutID()
+                    local phase     = GG:GetViewedPhase()
+                    local added, skipped = 0, 0
+                    for _, slotID in ipairs(GG.SLOT_ORDER) do
+                        local items = AL:GetBiSItemsForSpec(match, phase, slotID, 3)
+                        if items then
+                            for _, itemID in ipairs(items) do
+                                local entry = GG:AddGoal(loadoutID, phase, slotID, itemID)
+                                if entry then added = added + 1 else skipped = skipped + 1 end
+                            end
+                        end
+                    end
+                    IT:Print(string.format(
+                        "Imported BiS from %s into %s: %d added, %d skipped.",
+                        match, phase, added, skipped),
+                        IT.Colors.success)
+                end
+            end
+        end
     elseif msg == "gear unsourced" or msg == "unsourced" then
         -- List every itemID on this character's wishlist that the source-label
         -- lookup currently can't resolve. Used to seed missing Tokens DB
@@ -489,6 +530,7 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("  /it gear      - Toggle gear goals window", IT.Colors.info)
         IT:Print("  /it phase X   - Set current phase (pre-raid, 1, 2, 3, 3.5, 4)", IT.Colors.info)
         IT:Print("  /it gear copy <from> <to> - Copy a phase's picks (main loadout)", IT.Colors.info)
+        IT:Print("  /it gear import bis <Spec> - Import top picks from TBCA_BIS", IT.Colors.info)
         IT:Print("  /it gear atlasloot-stats - Diagnose AtlasLoot index/data", IT.Colors.info)
         IT:Print("  /it gear unsourced - List wishlist items with no source label", IT.Colors.info)
         IT:Print("  /it clear     - Clear loot history", IT.Colors.info)
