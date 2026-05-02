@@ -103,7 +103,7 @@ local function OnChatMsgLoot(msg)
         player      = player,
         isSelf      = isSelf,
         isGroupLoot = isGroupLoot,
-        timestamp   = GetTime(),
+        timestamp   = time(),
         icon        = icon,
     }
 
@@ -145,7 +145,7 @@ local function OnQuestLootReceived(questID, itemLink, count)
         player      = UnitName("player"),
         isSelf      = true,
         isGroupLoot = isGroupLoot,
-        timestamp   = GetTime(),
+        timestamp   = time(),
         icon        = icon,
     }
 
@@ -199,7 +199,7 @@ local function OnChatMsgSystem(msg)
         player      = UnitName("player"),
         isSelf      = true,
         isGroupLoot = isGroupLoot,
-        timestamp   = GetTime(),
+        timestamp   = time(),
         icon        = icon,
     }
 

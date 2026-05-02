@@ -216,15 +216,25 @@ function IT:GetQualityHex(quality)
     return string.format("|cFF%02X%02X%02X", r * 255, g * 255, b * 255)
 end
 
+--- Render a "X ago" relative time. Expects an epoch timestamp from `time()`.
+--- Defensive against nil and against legacy session-time stamps left over
+--- from the old GetTime()-based history. Unknown / unreadable timestamps
+--- render as an em-dash so the column reads "no data" rather than broken.
 function IT:FormatTimeAgo(timestamp)
-    local diff = GetTime() - timestamp
-    if diff < 60 then
-        return string.format("%ds ago", diff)
-    elseif diff < 3600 then
-        return string.format("%dm ago", diff / 60)
-    else
-        return string.format("%dh ago", diff / 3600)
-    end
+    if type(timestamp) ~= "number" then return "\226\128\148" end   -- —
+    -- Legacy session-time values are always far below epoch (~10^9). The
+    -- migration in LootHistory:Initialize nils these on first load, but we
+    -- guard here too in case a stale entry slips through.
+    if timestamp < 1e9 then return "\226\128\148" end
+
+    local diff = time() - timestamp
+    if diff < 0 then return "\226\128\148" end
+    if diff < 60       then return string.format("%ds ago",  diff) end
+    if diff < 3600     then return string.format("%dm ago",  math.floor(diff / 60)) end
+    if diff < 86400    then return string.format("%dh ago",  math.floor(diff / 3600)) end
+    if diff < 86400*7  then return string.format("%dd ago",  math.floor(diff / 86400)) end
+    if diff < 86400*30 then return string.format("%dw ago",  math.floor(diff / 86400 / 7)) end
+    return string.format("%dmo ago", math.floor(diff / 86400 / 30))
 end
 
 --- Convert a Blizzard format string (e.g. LOOT_ITEM) to a Lua pattern.
@@ -590,7 +600,7 @@ function IT:FireTestLoot()
         player      = player,
         isSelf      = isSelf,
         isGroupLoot = not isSelf,
-        timestamp   = GetTime(),
+        timestamp   = time(),
         icon        = item.icon,
     }
 

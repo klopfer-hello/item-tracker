@@ -2468,20 +2468,6 @@ end
 
 local LOG_ROW_H = 40
 
---- Safe time-ago: LootDetector stamps entries with GetTime() (session-relative
---- since server start). After /reload that resets, so old persisted entries
---- can produce negative diffs. Clamp pathological values to "earlier" rather
---- than print nonsense.
-local function SafeTimeAgo(ts)
-    if not ts or type(ts) ~= "number" then return "?" end
-    local now  = GetTime()
-    local diff = now - ts
-    if diff < 0 or diff > 86400 * 365 then
-        return "earlier"
-    end
-    return IT:FormatTimeAgo(ts)
-end
-
 local function BuildLootLogPane(parent)
     local sf = CreateFrame("ScrollFrame", "ItemTrackerGearGoalsLootLogScroll",
         parent, "UIPanelScrollFrameTemplate")
@@ -2597,7 +2583,7 @@ function UI:RenderLootLogPane()
             row:SetPoint("TOPRIGHT", pane.scrollChild, "TOPRIGHT", -4, -((i - 1) * (LOG_ROW_H + 4)))
 
             row.itemLink = entry.itemLink
-            row.time:SetText(SafeTimeAgo(entry.timestamp))
+            row.time:SetText(IT:FormatTimeAgo(entry.timestamp))
             row.name:SetText(entry.itemLink or ("Item " .. entry.itemID))
             row.name:SetTextColor(r, g, b)
             row.looter:SetText(entry.player or "—")

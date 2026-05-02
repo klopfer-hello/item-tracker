@@ -150,7 +150,32 @@ end
 -- Module Interface
 -- ============================================================================
 
+--- One-shot migration of legacy session-time stamps (GetTime() values
+--- saved before the addon switched to epoch time()). Anything still using
+--- the old clock has a value far below 10^9; nil it so FormatTimeAgo
+--- shows "earlier" instead of a wildly negative diff. Idempotent and
+--- gated by a flag so we don't re-walk the list every load.
+local function migrateLegacyTimestamps()
+    if not IT.db then return end
+    if IT.db.lootHistoryTimestampsMigrated then return end
+    IT.db.lootHistoryTimestampsMigrated = true
+
+    if not IT.db.history then return end
+    local migrated = 0
+    for _, entry in ipairs(IT.db.history) do
+        if type(entry.timestamp) == "number" and entry.timestamp < 1e9 then
+            entry.timestamp = nil
+            migrated = migrated + 1
+        end
+    end
+    if migrated > 0 then
+        IT:Debug("LootHistory: nulled " .. migrated ..
+            " session-time stamps (epoch migration).")
+    end
+end
+
 function History:Initialize()
+    migrateLegacyTimestamps()
     history = IT.db.history
     IT.Events:Subscribe("ITEM_LOOTED", OnItemLooted)
     IT.Events:Subscribe("ROLL_ENDED", OnRollEnded)
