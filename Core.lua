@@ -189,7 +189,7 @@ end)
 function IT:Print(msg, color)
     if IT.db and IT.db.settings and not IT.db.settings.chatOutput then return end
     color = color or IT.Colors.addon
-    DEFAULT_CHAT_FRAME:AddMessage(color .. "[ItemTracker]|r " .. msg)
+    DEFAULT_CHAT_FRAME:AddMessage(color .. "[KIT]|r " .. msg)
 end
 
 function IT:Debug(msg)
@@ -334,165 +334,27 @@ end
 -- Slash Commands
 -- ============================================================================
 
-SLASH_ITEMTRACKER1 = "/itemtracker"
+-- /kit is the new primary alias under the "Klopfer's Item Tracker" rebrand;
+-- /it and /itemtracker are kept for muscle memory / backwards compatibility.
+SLASH_ITEMTRACKER1 = "/kit"
 SLASH_ITEMTRACKER2 = "/it"
+SLASH_ITEMTRACKER3 = "/itemtracker"
 
+-- The dispatcher is intentionally lean: anything reachable in the UI lives in
+-- the UI. What stays here is what's actually faster as a CLI — diagnostic
+-- toggles, version, status, destructive shortcuts, and the test harness.
 SlashCmdList["ITEMTRACKER"] = function(msg)
     msg = msg:trim():lower()
 
-    if msg == "debug" then
+    if msg == "" or msg == "gear" or msg == "goals" or msg == "bis" then
+        if IT.GearGoalsUI and IT.GearGoalsUI.Toggle then
+            IT.GearGoalsUI:Toggle()
+        end
+    elseif msg == "debug" then
         IT.debugMode = not IT.debugMode
         IT:Print("Debug mode: " .. (IT.debugMode and "ON" or "OFF"), IT.Colors.info)
     elseif msg == "version" then
         IT:Print("Version " .. IT.VERSION .. " (" .. IT.BUILD .. ")", IT.Colors.info)
-    elseif msg == "config" or msg == "options" then
-        if IT.Config and IT.Config.Toggle then
-            IT.Config:Toggle()
-        end
-    elseif msg == "history" then
-        if IT.UI and IT.UI.Toggle then
-            IT.UI:Toggle()
-        end
-    elseif msg == "gear" or msg == "goals" or msg == "bis" then
-        if IT.GearGoalsUI and IT.GearGoalsUI.Toggle then
-            IT.GearGoalsUI:Toggle()
-        end
-    elseif msg:match("^phase ") then
-        local p = msg:match("^phase%s+(.+)$")
-        if IT.GearGoals and p then
-            local valid = false
-            for _, ph in ipairs(IT.GearGoals.PHASES) do if ph == p then valid = true; break end end
-            if valid then
-                IT.GearGoals:SetCurrentPhase(p)
-                IT:Print("Current phase set to " .. p, IT.Colors.success)
-            else
-                IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "), IT.Colors.warning)
-            end
-        end
-    elseif msg:match("^gear%s+import%s+bis") then
-        local specInput = msg:match("^gear%s+import%s+bis%s+(.+)$")
-        local AL = IT.GearGoalsAtlasLoot
-        local GG = IT.GearGoals
-        if not AL or not GG or not AL.GetTBCASpecsForClass then
-            IT:Print("AtlasLoot TBCA_BIS plugin not available.", IT.Colors.warning)
-        else
-            local specs = AL:GetTBCASpecsForClass()
-            if #specs == 0 then
-                IT:Print("No TBCA_BIS specs found for your class.", IT.Colors.warning)
-            elseif not specInput then
-                IT:Print("Usage: /it gear import bis <SpecName>  (one of: " ..
-                    table.concat(specs, ", ") .. ")", IT.Colors.warning)
-            else
-                local match
-                for _, s in ipairs(specs) do
-                    if s:lower() == specInput:lower() then match = s; break end
-                end
-                if not match then
-                    IT:Print("Unknown spec '" .. specInput .. "'. Available: " ..
-                        table.concat(specs, ", "), IT.Colors.warning)
-                else
-                    local loadoutID = GG:GetMainLoadoutID()
-                    local phase     = GG:GetViewedPhase()
-                    local added, skipped = 0, 0
-                    for _, slotID in ipairs(GG.SLOT_ORDER) do
-                        local items = AL:GetBiSItemsForSpec(match, phase, slotID, 3)
-                        if items then
-                            for _, itemID in ipairs(items) do
-                                local entry = GG:AddGoal(loadoutID, phase, slotID, itemID)
-                                if entry then added = added + 1 else skipped = skipped + 1 end
-                            end
-                        end
-                    end
-                    IT:Print(string.format(
-                        "Imported BiS from %s into %s: %d added, %d skipped.",
-                        match, phase, added, skipped),
-                        IT.Colors.success)
-                end
-            end
-        end
-    elseif msg == "gear unsourced" or msg == "unsourced" then
-        -- List every itemID on this character's wishlist that the source-label
-        -- lookup currently can't resolve. Used to seed missing Tokens DB
-        -- entries for tier-set redemptions, vendor turn-ins, etc.
-        local AL = IT.GearGoalsAtlasLoot
-        if not AL or not IT.charDB or not IT.charDB.goals then
-            IT:Print("No goals or AtlasLoot module available.", IT.Colors.warning)
-            return
-        end
-        local seen, list = {}, {}
-        for loadoutID, byPhase in pairs(IT.charDB.goals) do
-            for phase, bySlot in pairs(byPhase) do
-                for slotID, goals in pairs(bySlot) do
-                    for _, g in ipairs(goals) do
-                        if g.itemID and not seen[g.itemID] then
-                            seen[g.itemID] = true
-                            local label = AL:GetSourceLabel(g.itemID)
-                            if not label then
-                                local name = GetItemInfo(g.itemID) or ("Item " .. g.itemID)
-                                table.insert(list, { id = g.itemID, name = name })
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        if #list == 0 then
-            IT:Print("All wishlist items resolve to a source. Nothing to report.", IT.Colors.success)
-        else
-            IT:Print("Wishlist items without an AtlasLoot / token-chain source:", IT.Colors.highlight)
-            for _, e in ipairs(list) do
-                IT:Print(string.format("  %d  %s", e.id, e.name), IT.Colors.info)
-            end
-            IT:Print("Paste the list to the developer to seed the Tokens DB.", IT.Colors.info)
-        end
-    elseif msg == "gear atlasloot-stats" or msg == "atlasloot-stats" then
-        local AL = IT.GearGoalsAtlasLoot
-        if not AL or not AL.GetReverseIndexStats then
-            IT:Print("GearGoals AtlasLoot module not available.", IT.Colors.warning)
-            return
-        end
-        local s = AL:GetReverseIndexStats(5)
-        IT:Print("---- AtlasLoot reverse index ----", IT.Colors.highlight)
-        IT:Print("AtlasLoot loaded:        " .. tostring(s.hasAtlasLoot), IT.Colors.info)
-        IT:Print("DungeonsAndRaids loaded: " .. tostring(s.drLoaded),     IT.Colors.info)
-        IT:Print("Storage keys:            " .. (#s.storageKeys > 0 and table.concat(s.storageKeys, ", ") or "(none)"), IT.Colors.info)
-        IT:Print("Reverse index size:      " .. tostring(s.indexSize),    IT.Colors.info)
-        if #s.samples == 0 then
-            IT:Print("No samples — index is empty.", IT.Colors.warning)
-        else
-            for _, e in ipairs(s.samples) do
-                local boss = e.boss or "?"
-                local raid = e.raid or "?"
-                IT:Print(string.format("  %d -> %s . %s", e.itemID, boss, raid), IT.Colors.info)
-            end
-        end
-        if AL.GetTBCAStatus then
-            local t = AL:GetTBCAStatus()
-            IT:Print("TBCA_BIS loaded:         " .. tostring(t.loaded) .. " (specs for player class: " .. tostring(t.specCount) .. ")", IT.Colors.info)
-        end
-    elseif msg:match("^gear%s+copy") or msg:match("^copy%s+") then
-        local from, to = msg:match("^gear%s+copy%s+(%S+)%s+(%S+)$")
-        if not from then from, to = msg:match("^copy%s+(%S+)%s+(%S+)$") end
-        if not (from and to) then
-            IT:Print("Usage: /it gear copy <fromPhase> <toPhase>", IT.Colors.warning)
-        else
-            local function isValid(p)
-                for _, ph in ipairs(IT.GearGoals.PHASES) do if ph == p then return true end end
-                return false
-            end
-            if not isValid(from) or not isValid(to) then
-                IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "),
-                    IT.Colors.warning)
-            else
-                local loadout = IT.GearGoals:GetMainLoadoutID()
-                local ok, err = IT.GearGoals:CopyPhase(loadout, from, to)
-                if ok then
-                    IT:Print("Copied " .. from .. " into " .. to .. " on main loadout.", IT.Colors.success)
-                else
-                    IT:Print("Copy failed: " .. (err or "?"), IT.Colors.error)
-                end
-            end
-        end
     elseif msg == "clear" then
         if IT.LootHistory then
             IT.LootHistory:Clear()
@@ -504,8 +366,6 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
             IT.GoldTracker:Reset()
         end
         IT:Print("Loot history and session gold cleared.", IT.Colors.success)
-    elseif msg == "reset" then
-        IT:Print("Use /it config to manage settings.", IT.Colors.info)
     elseif msg == "test" then
         IT:FireTestLoot()
     elseif msg == "test gold" then
@@ -534,25 +394,13 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         end
         IT:Print("ElvUI: " .. (IT.ElvUIDataText and IT.ElvUIDataText:IsActive() and "active" or "not detected"), IT.Colors.info)
     else
-        IT:Print("Commands:", IT.Colors.highlight)
-        IT:Print("  /it config    - Open settings", IT.Colors.info)
-        IT:Print("  /it history   - Toggle history panel", IT.Colors.info)
-        IT:Print("  /it gear      - Toggle gear goals window", IT.Colors.info)
-        IT:Print("  /it phase X   - Set current phase (pre-raid, 1, 2, 3, 3.5, 4)", IT.Colors.info)
-        IT:Print("  /it gear copy <from> <to> - Copy a phase's picks (main loadout)", IT.Colors.info)
-        IT:Print("  /it gear import bis <Spec> - Import top picks from TBCA_BIS", IT.Colors.info)
-        IT:Print("  /it gear atlasloot-stats - Diagnose AtlasLoot index/data", IT.Colors.info)
-        IT:Print("  /it gear unsourced - List wishlist items with no source label", IT.Colors.info)
-        IT:Print("  /it clear     - Clear loot history", IT.Colors.info)
-        IT:Print("  /it status    - Show integration status", IT.Colors.info)
-        IT:Print("  /it test      - Simulate a loot drop", IT.Colors.info)
-        IT:Print("  /it test roll - Simulate a group roll", IT.Colors.info)
-        IT:Print("  /it test lc   - Simulate a loot council session", IT.Colors.info)
-        IT:Print("  /it test reserve - Simulate a LootReserve roll", IT.Colors.info)
-        IT:Print("  /it test gear - Simulate a gear-goal drop popup", IT.Colors.info)
-        IT:Print("  /it test token - Simulate a token drop with redemption", IT.Colors.info)
-        IT:Print("  /it debug     - Toggle debug mode", IT.Colors.info)
-        IT:Print("  /it version   - Show version", IT.Colors.info)
+        IT:Print("Commands (most things are in the UI — open with /kit):", IT.Colors.highlight)
+        IT:Print("  /kit              - Toggle gear tracker window", IT.Colors.info)
+        IT:Print("  /kit status       - Show integration status", IT.Colors.info)
+        IT:Print("  /kit clear        - Clear loot history and session gold", IT.Colors.info)
+        IT:Print("  /kit debug        - Toggle debug mode", IT.Colors.info)
+        IT:Print("  /kit version      - Show version", IT.Colors.info)
+        IT:Print("  /kit test [gold|roll|lc|reserve|gear|token] - Simulate events", IT.Colors.info)
     end
 end
 

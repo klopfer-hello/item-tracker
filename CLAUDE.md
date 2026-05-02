@@ -1,10 +1,14 @@
-# ItemTracker - CLAUDE.md
+# Klopfer's Item Tracker - CLAUDE.md
 
 ## Project Overview
 
-ItemTracker is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20504/20505, game version 2.5.5). It provides Windows Action Center-style toast notifications for looted items, group/raid roll tracking, loot council and soft reserve integration, a scrollable loot history panel with filters, and session gold tracking — all in a glassy, transparent design.
+**Klopfer's Item Tracker** is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20504/20505, game version 2.5.5). It bundles three big features behind a single addon:
 
-The addon uses a global namespace `IT` (also `ItemTracker`) populated via the addon vararg `local ADDON_NAME, IT = ...`.
+1. **Loot tracking** — toast notifications for looted items, group/raid roll tracking, RCLootCouncil + LootReserve integration, scrollable history panel.
+2. **Session gold** — running gold/hr rate with vendor and Auctionator AH valuation, optional LDB DataText.
+3. **GearGoals** — character-scoped, spec-aware, phase-organised BiS / loadout tracker with drop-alert popups, AtlasLoot source labels, and tier-set token redemption.
+
+The folder is still named `ItemTracker` (and the SavedVariables key is still `ItemTrackerDB`) for backwards compatibility — only the user-facing branding changed. The addon uses a global namespace `IT` (also `ItemTracker`) populated via the addon vararg `local ADDON_NAME, IT = ...`. Chat output is prefixed `[KIT]`. Slash commands: `/kit` (primary), `/it` and `/itemtracker` kept as aliases. The dispatcher itself is intentionally minimal — most interaction is through the UI; the CLI keeps only `status`, `clear`, `debug`, `version`, and the `test …` simulation harness.
 
 ## Features
 

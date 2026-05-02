@@ -76,7 +76,7 @@ local function ShowBar()
     barFrame:EnableMouse(true)
     barFrame:SetBackdropColor(0.10, 0.10, 0.16, 0.78)
     barFrame:SetBackdropBorderColor(0.30, 0.75, 0.98, 0.35)
-    barFrame.title:SetText("|cFF00D1FFItemTracker|r")
+    barFrame.title:SetText("|cFFFFCC33Klopfer's Item Tracker|r")
     barFrame.grip:SetText("|cFF666666::::|r")
 end
 
@@ -151,7 +151,7 @@ local function CreateAnchorBar()
             ShowBar()
         end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("ItemTracker", CD.accent[1], CD.accent[2], CD.accent[3])
+        GameTooltip:AddLine("Klopfer's Item Tracker", CD.accent[1], CD.accent[2], CD.accent[3])
         GameTooltip:AddLine("Left-click: Toggle history", 0.7, 0.7, 0.7)
         GameTooltip:AddLine("Right-click: Settings", 0.7, 0.7, 0.7)
         if not IT.db.settings.locked then

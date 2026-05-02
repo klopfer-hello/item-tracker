@@ -52,7 +52,7 @@ local function BuildPanel()
 
     panel = CreateFrame("Frame")
     panel.name   = "GearGoals"
-    panel.parent = "ItemTracker"   -- nest under ItemTracker in the AddOns tree
+    panel.parent = "Klopfer's Item Tracker"   -- nest under the parent in the AddOns tree
 
     -- Title
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")

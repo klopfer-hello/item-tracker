@@ -52,14 +52,14 @@ end
 
 local function OnTooltipShow(tooltip)
     if not IT.GoldTracker then
-        tooltip:AddLine("|cFF00D1FFItemTracker|r — No data")
+        tooltip:AddLine("|cFFFFCC33Klopfer's Item Tracker|r — No data")
         return
     end
 
     local r = IT.GoldTracker:GetRates()
 
     -- Header
-    tooltip:AddLine("|cFF00D1FFItemTracker|r — Session Gold")
+    tooltip:AddLine("|cFFFFCC33Klopfer's Item Tracker|r — Session Gold")
     tooltip:AddLine(" ")
 
     -- Session info

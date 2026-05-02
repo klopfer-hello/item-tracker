@@ -123,7 +123,7 @@ local function CreateMinimapButton()
     -- Tooltip
     f:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine("ItemTracker", 0.28, 0.74, 0.97)
+        GameTooltip:AddLine("Klopfer's Item Tracker", 1.00, 0.80, 0.20)
         GameTooltip:AddLine("Left-click: Toggle window", 1, 1, 1)
         GameTooltip:AddLine("Shift-click: Loot history", 1, 1, 1)
         GameTooltip:AddLine("Right-click: Settings", 1, 1, 1)

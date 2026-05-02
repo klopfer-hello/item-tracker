@@ -493,11 +493,11 @@ local function CreateBlizzardPanel()
     if not InterfaceOptions_AddCategory then return nil end
 
     local panel = CreateFrame("Frame")
-    panel.name = "ItemTracker"
+    panel.name = "Klopfer's Item Tracker"
 
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("|cFF00D1FFItemTracker|r")
+    title:SetText("|cFFFFCC33Klopfer's Item Tracker|r")
 
     local version = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     version:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
@@ -506,7 +506,7 @@ local function CreateBlizzardPanel()
 
     local desc = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     desc:SetPoint("TOPLEFT", version, "BOTTOMLEFT", 0, -12)
-    desc:SetText("Loot tracking and toast notifications for TBC Anniversary.")
+    desc:SetText("Loot tracking, roll tracking, and a per-character BiS / loadout tracker.")
     desc:SetTextColor(CD.value[1], CD.value[2], CD.value[3])
 
     local openBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
