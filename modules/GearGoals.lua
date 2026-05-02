@@ -309,6 +309,24 @@ function GG:RenameLoadout(id, newName)
     return true
 end
 
+--- Validate and assign a hex colour (`#RRGGBB`) to a loadout. The UI uses
+--- this for the small swatch on the cycle button. Pass nil to clear.
+function GG:SetLoadoutColor(id, hex)
+    local l = self:GetLoadoutByID(id)
+    if not l then return false, "loadout not found" end
+    if hex == nil or hex == "" then
+        l.color = nil
+    else
+        local clean = (hex:sub(1, 1) == "#") and hex:sub(2) or hex
+        if not clean:match("^%x%x%x%x%x%x$") then
+            return false, "expected #RRGGBB"
+        end
+        l.color = "#" .. clean:upper()
+    end
+    IT.Events:Fire("GEAR_GOALS_LOADOUT_CHANGED", { id = id, reason = "color-changed" })
+    return true
+end
+
 function GG:SetMainLoadout(id)
     local target = self:GetLoadoutByID(id)
     if not target then return false, "loadout not found" end

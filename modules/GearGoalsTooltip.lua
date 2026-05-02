@@ -32,6 +32,21 @@ local DIM  = "|cFF6E6E78"
 local PINK = "|cFFEE6680"
 local GREEN = "|cFF55CC66"
 
+--- Convert a loadout's `#RRGGBB` colour into a WoW colour escape, falling
+--- back to GOLD for the main loadout / DIM for an alt without a colour.
+local function loadoutColorEscape(loadoutID, isMain)
+    local GG = IT.GearGoals
+    local loadout = GG and GG.GetLoadoutByID and GG:GetLoadoutByID(loadoutID)
+    local hex = loadout and loadout.color
+    if hex and type(hex) == "string" then
+        local clean = (hex:sub(1, 1) == "#") and hex:sub(2) or hex
+        if clean:match("^%x%x%x%x%x%x$") then
+            return "|cFF" .. clean:upper()
+        end
+    end
+    return isMain and GOLD or DIM
+end
+
 -- ============================================================================
 -- Tooltip line builder
 -- ============================================================================
@@ -82,12 +97,16 @@ local function AppendGoalLines(tooltip, itemID)
     for _, loadoutID in ipairs(order) do
         local entries = byLoadout[loadoutID]
         local isMain  = (loadoutID == mainLoadout)
-        local prefix  = isMain and (GOLD .. "On your " .. PrettyLoadout(loadoutID) .. " list:|r")
-                                or (DIM  .. "Also on " .. PrettyLoadout(loadoutID) .. ":|r")
+        -- Use the loadout's colour swatch (when set) so the tooltip lines
+        -- match the sidebar swatch the user picked. Falls back to GOLD/DIM.
+        local color   = loadoutColorEscape(loadoutID, isMain)
+        local prefix  = isMain
+            and (color .. "On your " .. PrettyLoadout(loadoutID) .. " list:|r")
+            or  (color .. "Also on " .. PrettyLoadout(loadoutID) .. ":|r")
         tooltip:AddLine(prefix)
         for _, m in ipairs(entries) do
             local phaseLabel = GG.PHASE_LABEL[m.phase] or m.phase
-            local rankColor  = isMain and GOLD or DIM
+            local rankColor  = color
             local statusSuffix = ""
             if m.goal and m.goal.obtained then
                 statusSuffix = "  " .. GREEN .. "(have)|r"

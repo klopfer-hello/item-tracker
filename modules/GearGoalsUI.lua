@@ -61,6 +61,9 @@ local addDialog                  -- inline add-item dialog frame
 local searchTerm       = ""
 local viewLoadoutID              -- loadout the UI is currently viewing (defaults to main)
 local renameDialog               -- inline rename-loadout dialog
+local ShowConfirm                -- forward-declared so RequestLoadoutDelete /
+                                 -- RequestPhaseCopy (defined before the dialog)
+                                 -- can reference it; assigned further down.
 
 -- ============================================================================
 -- Helpers
@@ -77,6 +80,7 @@ end
 
 local function AddBorder(parent, c, thickness)
     thickness = thickness or 1
+    local edges = {}
     for _, p in ipairs({
         { "TOPLEFT",    "TOPRIGHT",    nil, thickness },
         { "BOTTOMLEFT", "BOTTOMRIGHT", nil, thickness },
@@ -88,7 +92,9 @@ local function AddBorder(parent, c, thickness)
         if p[3] then t:SetWidth(p[3])  end
         if p[4] then t:SetHeight(p[4]) end
         SetColor(t, c)
+        table.insert(edges, t)
     end
+    return edges
 end
 
 local function CreatePanel(parent, color)
@@ -110,6 +116,26 @@ local function LoadoutLabel(loadoutID)
     if not loadoutID then return "—" end
     local GG = IT.GearGoals
     return (GG and GG.GetLoadoutName) and GG:GetLoadoutName(loadoutID) or loadoutID
+end
+
+-- Loadout colour palette (offered in the rename dialog). Hex strings are
+-- the canonical form persisted on the loadout entry.
+local SWATCH_COLORS = {
+    { hex = "#FFCC33", rgb = { 1.00, 0.80, 0.20 } }, -- gold
+    { hex = "#47BEF5", rgb = { 0.28, 0.74, 0.96 } }, -- cyan
+    { hex = "#A335EE", rgb = { 0.64, 0.21, 0.93 } }, -- purple
+    { hex = "#55CC66", rgb = { 0.33, 0.80, 0.40 } }, -- green
+}
+
+local function hexToRGB(hex)
+    if not hex or type(hex) ~= "string" then return nil end
+    local clean = (hex:sub(1, 1) == "#") and hex:sub(2) or hex
+    if not clean:match("^%x%x%x%x%x%x$") then return nil end
+    local r = tonumber(clean:sub(1, 2), 16)
+    local g = tonumber(clean:sub(3, 4), 16)
+    local bb = tonumber(clean:sub(5, 6), 16)
+    if not (r and g and bb) then return nil end
+    return { r / 255, g / 255, bb / 255 }
 end
 
 -- ============================================================================
@@ -401,8 +427,27 @@ local function BuildSidebar(parent, anchorTo)
     anchorBelow(s.loadoutBtn, s.loadoutLabel, SIDEBAR_GAP_INTRA)
     s.loadoutBtn.bg = AddBackground(s.loadoutBtn, P.surfaceAlt)
     AddBorder(s.loadoutBtn, P.border)
+    -- Loadout colour swatch (8×8 square left of the name). Painted from the
+    -- loadout's `color` field in Refresh; defaults to gold for the main
+    -- loadout, otherwise surfaceAlt (matches button background = invisible).
+    s.loadoutBtn.colorSwatch = s.loadoutBtn:CreateTexture(nil, "OVERLAY")
+    s.loadoutBtn.colorSwatch:SetSize(10, 10)
+    s.loadoutBtn.colorSwatch:SetPoint("LEFT", 8, 0)
+    SetColor(s.loadoutBtn.colorSwatch, P.surfaceAlt)
+
+    -- Static "click to switch" cue on the right edge — using ASCII because
+    -- WoW's default font doesn't cover the Arrows block (U+219x) so a
+    -- proper ↔ would render as a blank box.
+    s.loadoutBtn.chevron = s.loadoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    s.loadoutBtn.chevron:SetPoint("RIGHT", -8, 0)
+    s.loadoutBtn.chevron:SetText("<>")
+    s.loadoutBtn.chevron:SetTextColor(unpack(P.label))
+
     s.loadoutBtn.text = s.loadoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.loadoutBtn.text:SetPoint("LEFT", 8, 0)
+    s.loadoutBtn.text:SetPoint("LEFT", 24, 0)
+    s.loadoutBtn.text:SetPoint("RIGHT", s.loadoutBtn.chevron, "LEFT", -6, 0)
+    s.loadoutBtn.text:SetJustifyH("LEFT")
+    s.loadoutBtn.text:SetWordWrap(false)
     s.loadoutBtn.text:SetTextColor(unpack(P.value))
     s.loadoutBtn:SetScript("OnEnter", function(self) SetColor(self.bg, { 0.16, 0.16, 0.20, 1 }) end)
     s.loadoutBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
@@ -422,7 +467,7 @@ local function BuildSidebar(parent, anchorTo)
         b:SetScript("OnClick", onClick)
         return b
     end
-    s.renameBtn = MakeAction("Rename", function() UI:OpenRenameLoadoutDialog() end)
+    s.renameBtn = MakeAction("Edit", function() UI:OpenRenameLoadoutDialog() end)
     anchorBelow(s.renameBtn, s.loadoutBtn, SIDEBAR_GAP_INTRA)
 
     s.setMainBtn = MakeAction("Set main", function()
@@ -1182,6 +1227,21 @@ function UI:Refresh()
     end
     sidebar.loadoutBtn.text:SetText(label)
 
+    -- Loadout colour swatch: explicit colour wins, else gold for main /
+    -- transparent (button background) for alt without a colour set.
+    local swatchRGB = viewing and hexToRGB(viewing.color)
+    if swatchRGB then
+        SetColor(sidebar.loadoutBtn.colorSwatch, swatchRGB)
+    elseif spec == mainID then
+        SetColor(sidebar.loadoutBtn.colorSwatch, P.accent)
+    else
+        SetColor(sidebar.loadoutBtn.colorSwatch, P.surfaceAlt)
+    end
+
+    -- Show / hide the action buttons. The relative anchors set by
+    -- BuildSidebar (renameBtn -> loadoutBtn:BOTTOMLEFT, setMainBtn ->
+    -- renameBtn:TOPRIGHT, addLoadoutBtn -> renameBtn:TOPLEFT) stay intact;
+    -- here we only flip visibility and width.
     if #loadouts < 2 then
         sidebar.renameBtn:Hide()
         sidebar.setMainBtn:Hide()
@@ -1192,15 +1252,9 @@ function UI:Refresh()
         if spec == mainID then
             sidebar.setMainBtn:Hide()
             sidebar.renameBtn:SetWidth(SIDEBAR_W - 28)
-            sidebar.renameBtn:ClearAllPoints()
-            sidebar.renameBtn:SetPoint("TOPLEFT", 14, -240)
         else
             sidebar.renameBtn:SetWidth((SIDEBAR_W - 28 - 4) / 2)
-            sidebar.renameBtn:ClearAllPoints()
-            sidebar.renameBtn:SetPoint("TOPLEFT", 14, -240)
             sidebar.setMainBtn:Show()
-            sidebar.setMainBtn:ClearAllPoints()
-            sidebar.setMainBtn:SetPoint("TOPLEFT", sidebar.renameBtn, "TOPRIGHT", 4, 0)
         end
     end
 
@@ -1344,10 +1398,13 @@ end
 -- Rename / Add loadout dialog
 -- ============================================================================
 
+local SWATCH_SIZE = 22
+local SWATCH_GAP  = 8
+
 local function BuildRenameDialog(parent)
     local d = CreateFrame("Frame", "ItemTrackerGearGoalsRenameDialog", parent)
     d:SetFrameStrata("DIALOG")
-    d:SetSize(360, 140)
+    d:SetSize(360, 200)   -- taller to fit the colour-swatch row
     d:SetPoint("CENTER")
     d:Hide()
 
@@ -1381,23 +1438,120 @@ local function BuildRenameDialog(parent)
     d.errorText:SetPoint("TOPLEFT", 16, -86)
     d.errorText:SetTextColor(unpack(P.target))
 
-    local function MakeBtn(label, anchor, x)
+    -- Colour-swatch row — four predefined colours plus a "no colour" reset
+    -- swatch (the surfaceAlt swatch with a tiny strikethrough). Selecting a
+    -- swatch sets `d.pendingColor`; persisted on confirm.
+    d.swatchLabel = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    d.swatchLabel:SetPoint("TOPLEFT", 16, -110)
+    d.swatchLabel:SetText("Colour")
+    d.swatchLabel:SetTextColor(unpack(P.label))
+
+    d.swatches = {}
+
+    local function buildSwatch(rgb, hex, prevAnchor)
         local b = CreateFrame("Button", nil, inner)
-        b:SetSize(110, 24)
+        b:SetSize(SWATCH_SIZE, SWATCH_SIZE)
+        if prevAnchor then
+            b:SetPoint("LEFT", prevAnchor, "RIGHT", SWATCH_GAP, 0)
+        else
+            b:SetPoint("TOPLEFT", d.swatchLabel, "TOPRIGHT", 14, 4)
+        end
+        AddBackground(b, rgb)
+        AddBorder(b, P.border)
+
+        -- Active-state visuals — two complementary cues so the selected
+        -- swatch reads at a glance:
+        --   1) a 2px white border around the swatch
+        --   2) a small accent pip extending below the swatch
+        b.activeBorderEdges = AddBorder(b, { 1, 1, 1, 1 }, 2)
+        for _, t in ipairs(b.activeBorderEdges) do t:Hide() end
+
+        b.activePip = b:CreateTexture(nil, "OVERLAY")
+        b.activePip:SetSize(SWATCH_SIZE - 8, 3)
+        b.activePip:SetPoint("TOP", b, "BOTTOM", 0, -3)
+        SetColor(b.activePip, P.accent)
+        b.activePip:Hide()
+
+        b.hex = hex
+        b:SetScript("OnEnter", function(self)
+            -- Subtle hover hint independent of selection state
+            for _, t in ipairs(self.activeBorderEdges) do
+                if not self._isActive then SetColor(t, { 1, 1, 1, 0.4 }); t:Show() end
+            end
+        end)
+        b:SetScript("OnLeave", function(self)
+            if not self._isActive then
+                for _, t in ipairs(self.activeBorderEdges) do t:Hide() end
+            end
+        end)
+        b:SetScript("OnClick", function()
+            d.pendingColor = hex
+            UI:RepaintRenameSwatches()
+        end)
+        return b
+    end
+
+    -- "No colour" first (clears the loadout colour), then the four palette colours.
+    d.swatchNone = buildSwatch(P.surfaceAlt, nil, nil)
+    -- Tiny crossbar to indicate the "no colour" swatch
+    local cross = d.swatchNone:CreateTexture(nil, "OVERLAY")
+    cross:SetSize(SWATCH_SIZE - 6, 1)
+    cross:SetPoint("CENTER")
+    SetColor(cross, P.label)
+    table.insert(d.swatches, d.swatchNone)
+
+    local prev = d.swatchNone
+    for _, c in ipairs(SWATCH_COLORS) do
+        local b = buildSwatch(c.rgb, c.hex, prev)
+        table.insert(d.swatches, b)
+        prev = b
+    end
+
+    -- Bottom-row buttons. Delete sits between Cancel and OK and uses the
+    -- target/pink text colour to read as destructive. Visibility set in
+    -- OpenRenameLoadoutDialog.
+    local function MakeBtn(label, anchor, x, width)
+        local b = CreateFrame("Button", nil, inner)
+        b:SetSize(width or 110, 24)
         b:SetPoint("BOTTOM" .. anchor, x, 10)
         AddBackground(b, P.surfaceAlt)
         AddBorder(b, P.border)
-        local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        t:SetPoint("CENTER")
-        t:SetText(label)
-        t:SetTextColor(unpack(P.value))
+        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(label)
+        b.text:SetTextColor(unpack(P.value))
         return b
     end
     d.okBtn     = MakeBtn("OK",     "RIGHT", -16)
-    d.cancelBtn = MakeBtn("Cancel", "LEFT",   16)
+    d.deleteBtn = MakeBtn("Delete", "RIGHT", -132, 80)   -- 80 wide, 132 = OK width 110 + gap 6 + own width nudge
+    d.deleteBtn.text:SetTextColor(unpack(P.target))
+    d.cancelBtn = MakeBtn("Cancel", "LEFT", 16)
+
     d.okBtn:SetScript("OnClick",     function() UI:ConfirmRenameLoadout() end)
     d.cancelBtn:SetScript("OnClick", function() d:Hide() end)
+    d.deleteBtn:SetScript("OnClick", function() UI:RequestLoadoutDelete() end)
+
     return d
+end
+
+--- Paint the selection state on every swatch: white border + accent pip
+--- on the active one, hidden on the rest. Active = swatch.hex matches
+--- renameDialog.pendingColor (nil = the no-colour swatch).
+function UI:RepaintRenameSwatches()
+    if not renameDialog or not renameDialog.swatches then return end
+    for _, b in ipairs(renameDialog.swatches) do
+        local active = (b.hex == renameDialog.pendingColor)
+        b._isActive = active
+        for _, t in ipairs(b.activeBorderEdges) do
+            if active then
+                SetColor(t, { 1, 1, 1, 1 })
+                t:Show()
+            else
+                t:Hide()
+            end
+        end
+        if active then b.activePip:Show() else b.activePip:Hide() end
+    end
 end
 
 --- Open the rename dialog. If `addMode` is true, the dialog creates a new
@@ -1408,12 +1562,22 @@ function UI:OpenRenameLoadoutDialog(addMode)
     if addMode then
         renameDialog.title:SetText("Add loadout")
         renameDialog.editBox:SetText("")
+        renameDialog.pendingColor = nil
+        renameDialog.deleteBtn:Hide()
     else
         local cur = IT.GearGoals:GetLoadoutByID(viewLoadoutID)
-        renameDialog.title:SetText("Rename loadout")
+        renameDialog.title:SetText("Edit loadout")
         renameDialog.editBox:SetText(cur and cur.name or "")
+        renameDialog.pendingColor = cur and cur.color or nil
+        -- Delete is offered only when there's a survivor to keep.
+        if #IT.GearGoals:GetLoadouts() > 1 then
+            renameDialog.deleteBtn:Show()
+        else
+            renameDialog.deleteBtn:Hide()
+        end
     end
     renameDialog.errorText:SetText("")
+    UI:RepaintRenameSwatches()
     renameDialog:Show()
     renameDialog.editBox:SetFocus()
     renameDialog.editBox:HighlightText()
@@ -1433,15 +1597,49 @@ function UI:ConfirmRenameLoadout()
             return
         end
         viewLoadoutID = entry.id
+        if renameDialog.pendingColor then
+            IT.GearGoals:SetLoadoutColor(entry.id, renameDialog.pendingColor)
+        end
     else
         local ok, err = IT.GearGoals:RenameLoadout(viewLoadoutID, name)
         if not ok then
             renameDialog.errorText:SetText(err or "?")
             return
         end
+        -- Apply colour change if the user picked a different swatch.
+        local cur = IT.GearGoals:GetLoadoutByID(viewLoadoutID)
+        if (cur and cur.color or nil) ~= renameDialog.pendingColor then
+            IT.GearGoals:SetLoadoutColor(viewLoadoutID, renameDialog.pendingColor)
+        end
     end
     renameDialog:Hide()
     UI:Refresh()
+end
+
+--- Delete-button entry point. Confirms via the existing ShowConfirm dialog
+--- (same pattern Phase Copy uses) and then removes the viewed loadout.
+function UI:RequestLoadoutDelete()
+    if not renameDialog or not renameDialog:IsShown() then return end
+    local cur = IT.GearGoals:GetLoadoutByID(viewLoadoutID)
+    local label = (cur and cur.name) or viewLoadoutID or "?"
+    -- Hide the rename dialog first so the confirm popup isn't dimmed behind it.
+    renameDialog:Hide()
+    ShowConfirm(
+        "Delete '" .. label .. "'?",
+        "All picks on this loadout will be removed permanently. " ..
+        "This cannot be undone.",
+        function()
+            local ok, err = IT.GearGoals:RemoveLoadout(viewLoadoutID)
+            if ok then
+                viewLoadoutID = IT.GearGoals:GetMainLoadoutID()
+                IT:Print("Deleted loadout '" .. label .. "'.", IT.Colors.success)
+                UI:Refresh()
+            else
+                IT:Print("Couldn't delete loadout: " .. (err or "?"), IT.Colors.error)
+            end
+        end,
+        "Delete"
+    )
 end
 
 -- ============================================================================
@@ -1501,10 +1699,11 @@ local function BuildConfirmDialog(parent)
     return d
 end
 
-local function ShowConfirm(title, body, onConfirm)
+ShowConfirm = function(title, body, onConfirm, confirmLabel)
     if not confirmDialog then confirmDialog = BuildConfirmDialog(frame) end
     confirmDialog.title:SetText(title)
     confirmDialog.body:SetText(body)
+    confirmDialog.confirmBtn.text:SetText(confirmLabel or "Overwrite")
     confirmDialog.onConfirm = onConfirm
     confirmDialog:Show()
 end
