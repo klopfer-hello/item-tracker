@@ -67,6 +67,7 @@ local function AddCornerBracket(parent, corner, c, length)
         t1:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0); t1:SetSize(length, 1)
         t2:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0); t2:SetSize(1, length)
     end
+    return t1, t2
 end
 
 local function GoldText(s) return "|cFFFFCC33" .. s .. "|r" end
@@ -153,11 +154,15 @@ local function BuildFrame()
     SetColor(innerBg, P.surface)
     AddBorder(inner, P.border)
 
-    -- Corner brackets (decorative)
-    AddCornerBracket(inner, "TOPLEFT",     P.accent, 18)
-    AddCornerBracket(inner, "TOPRIGHT",    P.accent, 18)
-    AddCornerBracket(inner, "BOTTOMLEFT",  P.accent, 18)
-    AddCornerBracket(inner, "BOTTOMRIGHT", P.accent, 18)
+    -- Corner brackets (decorative). Tracked on frame.cornerTextures so the
+    -- pulse animation can fade them in unison while the popup is awaiting
+    -- input.
+    frame.cornerTextures = {}
+    for _, corner in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
+        local t1, t2 = AddCornerBracket(inner, corner, P.accent, 18)
+        table.insert(frame.cornerTextures, t1)
+        table.insert(frame.cornerTextures, t2)
+    end
 
     -- ESC handler: register as a UI panel that closes on ESC
     table.insert(UISpecialFrames, "ItemTrackerGearGoalsAlert")
@@ -262,6 +267,34 @@ local function BuildFrame()
     -- WoW's default font doesn't cover the ↵ glyph (Arrows block); use the
     -- boxed-key style so the keys read as buttons.
     frame.footer:SetText(DimText("[Enter] confirm · [Esc] dismiss"))
+
+    -- Fade-in: gentle 0.3s alpha ramp on Show. Played by Alert:Show when
+    -- the popupAnimations setting is on; skipped otherwise so users who
+    -- explicitly turn it off get an instant snap-in.
+    frame.fadeIn = frame:CreateAnimationGroup()
+    local fadeAnim = frame.fadeIn:CreateAnimation("Alpha")
+    fadeAnim:SetFromAlpha(0)
+    fadeAnim:SetToAlpha(1)
+    fadeAnim:SetDuration(0.3)
+    frame.fadeIn:SetScript("OnPlay",     function() frame:SetAlpha(0) end)
+    frame.fadeIn:SetScript("OnFinished", function() frame:SetAlpha(1) end)
+
+    -- Corner-bracket pulse: alpha oscillates 0.7..1.0 over a 1.5s sine
+    -- while the popup is shown. Driven by OnUpdate so we can cheaply
+    -- check the setting each tick without rebuilding any AnimationGroup.
+    -- When the setting is off the textures stay at full alpha.
+    frame.pulseElapsed = 0
+    frame:SetScript("OnUpdate", function(self, dt)
+        local s = IT.db and IT.db.settings and IT.db.settings.gearGoals
+        if not (s and s.popupAnimations) then
+            for _, t in ipairs(self.cornerTextures) do t:SetAlpha(1) end
+            return
+        end
+        self.pulseElapsed = (self.pulseElapsed + dt) % 1.5
+        local phase = (self.pulseElapsed / 1.5) * 2 * math.pi
+        local alpha = 0.85 + 0.15 * math.sin(phase)
+        for _, t in ipairs(self.cornerTextures) do t:SetAlpha(alpha) end
+    end)
 
     -- Enter triggers MS roll if visible, else OS, else dismiss
     frame:EnableKeyboard(true)
@@ -436,8 +469,16 @@ function Alert:Show(drop)
     LayoutActions(hasMS, hasOS)
 
     if not frame:IsShown() then
+        local s = IT.db.settings.gearGoals
+        if s.popupAnimations and frame.fadeIn then
+            frame.fadeIn:Stop()   -- in case the user re-triggers mid-fade
+            frame.fadeIn:Play()
+        else
+            frame:SetAlpha(1)
+        end
+        frame.pulseElapsed = 0    -- restart the corner pulse from phase 0
         frame:Show()
-        if PlaySound and IT.db.settings.gearGoals.notifySound then
+        if PlaySound and s.notifySound then
             PlaySound(SOUNDKIT.RAID_WARNING or 8959)
         end
     end

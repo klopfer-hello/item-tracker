@@ -166,13 +166,14 @@ GG.INVTYPE_TO_SLOT = INVTYPE_TO_SLOT
 local DB_DEFAULTS = {
     settings = {
         gearGoals = {
-            currentPhase = "pre-raid",
-            notifySound  = true,
-            popupAnchor  = nil,
+            currentPhase     = "pre-raid",
+            notifySound      = true,
+            popupAnimations  = true,    -- fade-in + corner pulse on the BiS drop popup
+            popupAnchor      = nil,
             -- Seen-items cache for the add-dialog autocomplete (account-wide,
             -- so swapping characters carries common knowledge forward).
             -- [itemID] = { name, quality, lastSeen }
-            seenItems    = {},
+            seenItems        = {},
         },
     },
 }

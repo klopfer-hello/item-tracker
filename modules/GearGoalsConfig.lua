@@ -41,7 +41,7 @@ end
 
 local panel
 local phaseButtons = {}    -- [phaseString] = button frame
-local soundCheck
+local soundCheck, animCheck
 
 -- ============================================================================
 -- Build
@@ -102,10 +102,18 @@ local function BuildPanel()
         IT.db.settings.gearGoals.notifySound = self:GetChecked() and true or false
     end)
 
+    -- Popup-animations checkbox (fade-in + corner pulse on the BiS popup)
+    animCheck = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    animCheck:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -8)
+    animCheck.Text:SetText("Animate the BiS drop popup (fade-in + corner pulse)")
+    animCheck:SetScript("OnClick", function(self)
+        IT.db.settings.gearGoals.popupAnimations = self:GetChecked() and true or false
+    end)
+
     -- Open Gear Tracker button
     local openBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     openBtn:SetSize(220, 24)
-    openBtn:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 4, -16)
+    openBtn:SetPoint("TOPLEFT", animCheck, "BOTTOMLEFT", 4, -16)
     openBtn:SetText("Open Gear Tracker")
     openBtn:SetScript("OnClick", function()
         if IT.GearGoalsUI and IT.GearGoalsUI.Show then IT.GearGoalsUI:Show() end
@@ -141,6 +149,9 @@ function Cfg:Refresh()
     local s = IT.db.settings.gearGoals
     if soundCheck and s then
         soundCheck:SetChecked(s.notifySound and true or false)
+    end
+    if animCheck and s then
+        animCheck:SetChecked(s.popupAnimations and true or false)
     end
 
     -- LockHighlight on the current phase button (TBCA_BIS pattern)
