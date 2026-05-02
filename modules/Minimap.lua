@@ -3,8 +3,8 @@
     Single Responsibility: Render and manage a minimap button
     (draggable around the minimap edge).
 
-    Left-click:  toggle anchor bar + history
-    Right-click: open settings
+    Left-click:        toggle anchor bar + history
+    Shift-left-click:  open loot history
 ]]
 
 local _, IT = ...
@@ -91,8 +91,10 @@ local function CreateMinimapButton()
     -- Highlight
     f:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-    -- Click handlers
-    f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    -- Click handlers — settings live in Esc → Interface → AddOns, so no
+    -- right-click shortcut here. Brief 15 will repurpose the right-click
+    -- to open the Gear Tracker.
+    f:RegisterForClicks("LeftButtonUp")
     f:SetScript("OnClick", function(self, btn)
         if btn == "LeftButton" then
             if IsShiftKeyDown() then
@@ -100,8 +102,6 @@ local function CreateMinimapButton()
             else
                 if IT.UI then IT.UI:Toggle() end
             end
-        elseif btn == "RightButton" then
-            if IT.Config then IT.Config:Toggle() end
         end
     end)
 
@@ -126,7 +126,6 @@ local function CreateMinimapButton()
         GameTooltip:AddLine("Klopfer's Item Tracker", 1.00, 0.80, 0.20)
         GameTooltip:AddLine("Left-click: Toggle window", 1, 1, 1)
         GameTooltip:AddLine("Shift-click: Loot history", 1, 1, 1)
-        GameTooltip:AddLine("Right-click: Settings", 1, 1, 1)
         GameTooltip:AddLine("Drag: Move button", 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)

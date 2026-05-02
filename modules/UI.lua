@@ -134,14 +134,11 @@ local function CreateAnchorBar()
         IT.db.settings.position = { point, relativePoint, x, y }
     end)
 
-    -- Click to toggle history
+    -- Click to toggle history. Settings live in Esc → Interface → AddOns,
+    -- so the anchor bar no longer has a right-click shortcut for them.
     f:SetScript("OnMouseUp", function(self, button)
         if button == "LeftButton" then
             UI:ToggleHistory()
-        elseif button == "RightButton" then
-            if IT.Config and IT.Config.Toggle then
-                IT.Config:Toggle()
-            end
         end
     end)
 
@@ -153,7 +150,6 @@ local function CreateAnchorBar()
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:AddLine("Klopfer's Item Tracker", CD.accent[1], CD.accent[2], CD.accent[3])
         GameTooltip:AddLine("Left-click: Toggle history", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Right-click: Settings", 0.7, 0.7, 0.7)
         if not IT.db.settings.locked then
             GameTooltip:AddLine("Drag: Move", 0.7, 0.7, 0.7)
         end

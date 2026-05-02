@@ -96,19 +96,15 @@ local function OnTooltipShow(tooltip)
     end
     tooltip:AddLine(" ")
 
-    -- Hints
+    -- Hints — settings live in Esc → Interface → AddOns, so no shift-click
+    -- shortcut here. Brief 15 will rewire left-click to the Gear Tracker.
     tooltip:AddLine("Left-click: Loot history", 0.5, 0.5, 0.5)
-    tooltip:AddLine("Shift-click: Settings", 0.5, 0.5, 0.5)
     tooltip:AddLine("Right-click: Reset session", 0.5, 0.5, 0.5)
 end
 
 local function OnClick(self, button)
     if button == "LeftButton" then
-        if IsShiftKeyDown() then
-            if IT.Config then IT.Config:Toggle() end
-        else
-            if IT.UI then IT.UI:ToggleHistory() end
-        end
+        if IT.UI then IT.UI:ToggleHistory() end
     elseif button == "RightButton" then
         if IT.GoldTracker then IT.GoldTracker:Reset() end
     end
