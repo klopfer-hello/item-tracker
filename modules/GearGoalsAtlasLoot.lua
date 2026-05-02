@@ -99,14 +99,18 @@ local function walkInstance(raidName, instanceNode)
     walkBoss(raidName, raidName, instanceNode)
 end
 
--- Sibling AtlasLoot plugins that contribute additional source data beyond
--- raw boss drops: tier-set vendors, reputation rewards, PvP / honor items,
--- crafted gear. Most are LoadOnDemand and are dormant until needed; we
--- force-load them so their data shows up in `Storage` for the walker.
+-- Sibling AtlasLoot plugins that contribute *boss / vendor / faction / PvP*
+-- source data. Most are LoadOnDemand and dormant; we force-load them so
+-- their data shows up in `Storage` for the walker.
+--
+-- NOTE: Crafting is deliberately excluded. Its tables group items by recipe
+-- category (e.g. Alchemy → Elixirs) which produces nonsense "boss · raid"
+-- strings like "Elixirs · Alchemy" for any item that happens to be
+-- referenced from those tables. Collections IS included because it owns
+-- the legitimate vendor sections like "'Badge of Justice' Vendor".
 local SIBLING_PLUGINS = {
     "AtlasLootClassic_Factions",
     "AtlasLootClassic_PvP",
-    "AtlasLootClassic_Crafting",
     "AtlasLootClassic_Collections",
 }
 
@@ -123,6 +127,16 @@ local function ensureSiblingsLoaded()
     end
 end
 
+-- Walk addons in this order so a deterministic "first wins" assigns the
+-- best-quality source. DungeonsAndRaids is highest-quality (real boss
+-- drops); vendor / rep / PvP entries fill in items not in raids.
+local PLUGIN_PRIORITY = {
+    "AtlasLootClassic_DungeonsAndRaids",
+    "AtlasLootClassic_Factions",
+    "AtlasLootClassic_PvP",
+    "AtlasLootClassic_Collections",
+}
+
 local function buildIndex()
     indexBuilt = true
     sourceIndex = {}
@@ -133,17 +147,29 @@ local function buildIndex()
     local ok, db = pcall(function() return _G.AtlasLoot.ItemDB.Storage end)
     if not ok or not db then return end
 
-    for _, addonData in pairs(db) do
-        if type(addonData) == "table" then
-            for contentKey, contentNode in pairs(addonData) do
-                if type(contentNode) == "table"
-                   and type(contentKey) == "string"
-                   and not SKIP_STORAGE_KEYS[contentKey] then
-                    local raidName = safeName(contentNode) or contentKey
-                    pcall(walkInstance, raidName, contentNode)
-                end
+    local function walkAddon(addonData)
+        if type(addonData) ~= "table" then return end
+        for contentKey, contentNode in pairs(addonData) do
+            if type(contentNode) == "table"
+               and type(contentKey) == "string"
+               and not SKIP_STORAGE_KEYS[contentKey] then
+                local raidName = safeName(contentNode) or contentKey
+                pcall(walkInstance, raidName, contentNode)
             end
         end
+    end
+
+    -- Priority pass first.
+    local visited = {}
+    for _, addonKey in ipairs(PLUGIN_PRIORITY) do
+        if db[addonKey] then
+            walkAddon(db[addonKey])
+            visited[addonKey] = true
+        end
+    end
+    -- Catch any other registered addons we don't know about.
+    for addonKey, addonData in pairs(db) do
+        if not visited[addonKey] then walkAddon(addonData) end
     end
 end
 

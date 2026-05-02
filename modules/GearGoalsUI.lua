@@ -61,9 +61,13 @@ local addDialog                  -- inline add-item dialog frame
 local searchTerm       = ""
 local viewLoadoutID              -- loadout the UI is currently viewing (defaults to main)
 local renameDialog               -- inline rename-loadout dialog
+local activeTab        = "LOADOUT"   -- one of "LOADOUT" / "RAIDS" / "LOOT LOG"
 local ShowConfirm                -- forward-declared so RequestLoadoutDelete /
                                  -- RequestPhaseCopy (defined before the dialog)
                                  -- can reference it; assigned further down.
+local RaidBucketFor              -- forward-declared so Refresh's tab-count
+                                 -- code (above the RAIDS pane builder) can
+                                 -- call it; assigned with the pane code.
 
 -- ============================================================================
 -- Helpers
@@ -217,6 +221,68 @@ local function BuildHeader(parent)
     close:SetScript("OnClick", function() UI:Hide() end)
 
     return h
+end
+
+-- ============================================================================
+-- Top tab strip — LOADOUT / RAIDS / LOOT LOG
+-- ============================================================================
+
+local TOP_TAB_NAMES = { "LOADOUT", "RAIDS", "LOOT LOG" }
+local TOP_TAB_W = 130
+local TOP_TAB_H = 28
+local TOP_TAB_GAP = 4
+
+local function BuildTopTabs(parent, anchorTo)
+    local strip = CreateFrame("Frame", nil, parent)
+    strip:SetHeight(TOP_TAB_H + 4)
+    strip:SetPoint("TOPLEFT",  anchorTo, "BOTTOMLEFT",  0, -4)
+    strip:SetPoint("TOPRIGHT", anchorTo, "BOTTOMRIGHT", 0, -4)
+
+    strip.tabs = {}
+    local x = 0
+    for _, name in ipairs(TOP_TAB_NAMES) do
+        local b = CreateFrame("Button", nil, strip)
+        b:SetSize(TOP_TAB_W, TOP_TAB_H)
+        b:SetPoint("TOPLEFT", x, 0)
+        b.bg = AddBackground(b, P.surface)
+        AddBorder(b, P.border)
+
+        b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        b.label:SetPoint("LEFT", 12, 0)
+        b.label:SetText(name)
+
+        -- Count badge sits to the right of the label, dim by default.
+        b.badge = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        b.badge:SetPoint("LEFT", b.label, "RIGHT", 6, 0)
+        b.badge:SetTextColor(unpack(P.label))
+
+        b.bottomBar = b:CreateTexture(nil, "OVERLAY")
+        b.bottomBar:SetPoint("BOTTOMLEFT")
+        b.bottomBar:SetPoint("BOTTOMRIGHT")
+        b.bottomBar:SetHeight(2)
+        SetColor(b.bottomBar, { 0, 0, 0, 0 })
+
+        b.tabName = name
+        b:SetScript("OnClick", function() UI:SetTab(name) end)
+        strip.tabs[name] = b
+        x = x + TOP_TAB_W + TOP_TAB_GAP
+    end
+    return strip
+end
+
+local function PaintTopTabs(active)
+    if not frame or not frame.tabStrip then return end
+    for name, b in pairs(frame.tabStrip.tabs) do
+        if name == active then
+            SetColor(b.bg, P.accentDim)
+            SetColor(b.bottomBar, P.accent)
+            b.label:SetTextColor(unpack(P.accent))
+        else
+            SetColor(b.bg, P.surface)
+            SetColor(b.bottomBar, { 0, 0, 0, 0 })
+            b.label:SetTextColor(unpack(P.value))
+        end
+    end
 end
 
 -- ============================================================================
@@ -665,18 +731,21 @@ local function MakePickRow(parent, slotID)
     row.dnBtn = MakeArrow("-")
     row.dnBtn:SetPoint("BOTTOMRIGHT", -8, 3)
 
+    -- Reorder + remove use `row.slotID` (set in RenderRow) rather than the
+    -- closure value, because the same row is reused for the RAIDS pane
+    -- where successive renders may show goals from different slots.
     row.upBtn:SetScript("OnClick", function()
-        if not row.goal then return end
+        if not row.goal or not row.slotID then return end
         local viewed = IT.GearGoals:GetViewedPhase()
         local spec   = viewLoadoutID or IT.GearGoals:GetMainLoadoutID()
-        IT.GearGoals:MoveGoal(spec, viewed, slotID, row.goal.itemID, -1)
+        IT.GearGoals:MoveGoal(spec, viewed, row.slotID, row.goal.itemID, -1)
         UI:Refresh()
     end)
     row.dnBtn:SetScript("OnClick", function()
-        if not row.goal then return end
+        if not row.goal or not row.slotID then return end
         local viewed = IT.GearGoals:GetViewedPhase()
         local spec   = viewLoadoutID or IT.GearGoals:GetMainLoadoutID()
-        IT.GearGoals:MoveGoal(spec, viewed, slotID, row.goal.itemID, 1)
+        IT.GearGoals:MoveGoal(spec, viewed, row.slotID, row.goal.itemID, 1)
         UI:Refresh()
     end)
 
@@ -700,13 +769,13 @@ local function MakePickRow(parent, slotID)
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Right-click: remove
+    -- Right-click: remove (uses row.slotID set in RenderRow)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", function(self, btn)
-        if btn == "RightButton" and self.goal then
+        if btn == "RightButton" and self.goal and self.slotID then
             local viewed = IT.GearGoals:GetViewedPhase()
             local spec   = viewLoadoutID or IT.GearGoals:GetMainLoadoutID()
-            IT.GearGoals:RemoveGoal(spec, viewed, slotID, self.goal.itemID)
+            IT.GearGoals:RemoveGoal(spec, viewed, self.slotID, self.goal.itemID)
             UI:Refresh()
         end
     end)
@@ -1002,18 +1071,12 @@ function UI:ConfirmAdd()
         return
     end
 
-    -- Verify the resolved item is equippable in the slot (or any slot variant)
-    local _, validSlots = IT.GearGoals:ResolveSlotForItem(id)
-    if validSlots then
-        local match = false
-        for _, s in ipairs(validSlots) do
-            if s == addDialog.slotID then match = true; break end
-        end
-        if not match then
-            addDialog.errorText:SetText("Item not valid for this slot.")
-            return
-        end
-    end
+    -- Slot-validation used to hard-reject mismatched INVTYPEs. That blocked
+    -- legitimate edge cases (relics on slot 18, ranged weapons on Hunter MH,
+    -- items with INVTYPEs we hadn't mapped) and produced friction when the
+    -- user knew exactly what they wanted. We trust the user's pick now;
+    -- status detection will simply not auto-bind a goal whose item never
+    -- actually appears in the chosen slot.
 
     local spec   = viewLoadoutID or IT.GearGoals:GetMainLoadoutID()
     local phase  = IT.GearGoals:GetViewedPhase()
@@ -1037,6 +1100,7 @@ local function RenderRow(row, slotID, goal)
 
     row.itemLink = link
     row.goal     = goal
+    row.slotID   = slotID   -- per-render slot so RAIDS view's mixed-slot rows work
     row.rank:SetText("#" .. goal.rank)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.name:SetText(name)
@@ -1100,7 +1164,13 @@ function UI:Refresh()
     local phase = GG:GetViewedPhase()
     local activePhase = GG:GetCurrentPhase()
 
+    PaintTopTabs(activeTab)
     PaintPhaseTabs(phase, activePhase)
+
+    -- Show only the active pane.
+    frame.loadoutPane:SetShown(activeTab == "LOADOUT")
+    frame.raidsPane:SetShown(activeTab == "RAIDS")
+    frame.lootLogPane:SetShown(activeTab == "LOOT LOG")
 
     -- Sidebar
     sidebar.phaseValue:SetText(GG.PHASE_LABEL[phase] or phase)
@@ -1261,70 +1331,110 @@ function UI:Refresh()
     -- Filter row chips
     if frame.filterRow and frame.filterRow.Repaint then frame.filterRow:Repaint() end
 
-    -- Slot cards
-    local y = 0
+    -- Tab counts (badges to the right of each tab label).
+    local loadoutBadge, raidBadge, lootLogBadge = 0, 0, 0
     for _, slotID in ipairs(GG.SLOT_ORDER) do
-        local card = slotCards[slotID]
         local goals = GG:GetGoals(spec, phase, slotID)
-
-        local visibleGoals = {}
-        for _, g in ipairs(goals) do
-            if RowMatchesSearch(g) then table.insert(visibleGoals, g) end
-        end
-
-        if not CardMatchesFilter(slotID, visibleGoals) then
-            card:Hide()
-        else
-            card:Show()
-            local rowsNeeded = #visibleGoals
-            local h = SLOT_HEADER_H + 6 + math.max(rowsNeeded, 1) * (PICK_ROW_H + 4)
-            card:SetHeight(h)
-            card:ClearAllPoints()
-            card:SetPoint("TOPLEFT",  scrollChild, "TOPLEFT",  4, -y)
-            card:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -4, -y)
-            y = y + h + 8
-
-            card.count:SetText(rowsNeeded .. (rowsNeeded == 1 and " pick" or " picks"))
-
-            -- Repaint header bg if this slot is the active phase's "currently equipped" one
-            -- (subtle highlight if goal is equipped) — handled per-row below via row.highlight
-
-            -- Ensure enough rows
-            while #card.rows < rowsNeeded do
-                local row = MakePickRow(card, slotID)
-                table.insert(card.rows, row)
-            end
-
-            -- Layout + render
-            for i, row in ipairs(card.rows) do
-                if i <= rowsNeeded then
-                    row:ClearAllPoints()
-                    row:SetPoint("TOPLEFT",  card, "TOPLEFT",  6, -(SLOT_HEADER_H + 4 + (i-1) * (PICK_ROW_H + 4)))
-                    row:SetPoint("TOPRIGHT", card, "TOPRIGHT", -6, -(SLOT_HEADER_H + 4 + (i-1) * (PICK_ROW_H + 4)))
-                    row:SetHeight(PICK_ROW_H)
-                    RenderRow(row, slotID, visibleGoals[i])
-                    row:Show()
-                else
-                    row:Hide()
+        if #goals > 0 then loadoutBadge = loadoutBadge + 1 end
+    end
+    do
+        local seenRaids = {}
+        for _, slotID in ipairs(GG.SLOT_ORDER) do
+            for _, g in ipairs(GG:GetGoals(spec, phase, slotID)) do
+                local bucket = RaidBucketFor(g.itemID)
+                if not seenRaids[bucket] then
+                    seenRaids[bucket] = true
+                    raidBadge = raidBadge + 1
                 end
-            end
-
-            -- Empty-state: show a faint hint
-            if rowsNeeded == 0 then
-                if not card.emptyText then
-                    card.emptyText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                    card.emptyText:SetPoint("CENTER", 0, -10)
-                    card.emptyText:SetTextColor(unpack(P.label))
-                    card.emptyText:SetText("No picks yet — click + to add")
-                end
-                card.emptyText:Show()
-            elseif card.emptyText then
-                card.emptyText:Hide()
             end
         end
     end
+    if IT.LootHistory and IT.LootHistory.GetAll and IT.GearGoals.FindAllMatches then
+        local Tokens = IT.GearGoalsTokens
+        for _, e in ipairs(IT.LootHistory:GetAll()) do
+            if e.itemID then
+                local hasMatch = #IT.GearGoals:FindAllMatches(e.itemID) > 0
+                if not hasMatch and Tokens and Tokens:IsToken(e.itemID) then
+                    hasMatch = #IT.GearGoals:FindAllMatchesForToken(e.itemID) > 0
+                end
+                if hasMatch then lootLogBadge = lootLogBadge + 1 end
+            end
+        end
+    end
+    if frame.tabStrip then
+        frame.tabStrip.tabs["LOADOUT"].badge:SetText(tostring(loadoutBadge))
+        frame.tabStrip.tabs["RAIDS"].badge:SetText(tostring(raidBadge))
+        frame.tabStrip.tabs["LOOT LOG"].badge:SetText(tostring(lootLogBadge))
+    end
 
-    scrollChild:SetHeight(math.max(y + 8, scrollFrame:GetHeight()))
+    -- Render the active pane
+    if activeTab == "RAIDS" then
+        UI:RenderRaidsPane()
+    elseif activeTab == "LOOT LOG" then
+        UI:RenderLootLogPane()
+    else
+        -- LOADOUT: slot cards
+        local y = 0
+        for _, slotID in ipairs(GG.SLOT_ORDER) do
+            local card = slotCards[slotID]
+            local goals = GG:GetGoals(spec, phase, slotID)
+
+            local visibleGoals = {}
+            for _, g in ipairs(goals) do
+                if RowMatchesSearch(g) then table.insert(visibleGoals, g) end
+            end
+
+            if not CardMatchesFilter(slotID, visibleGoals) then
+                card:Hide()
+            else
+                card:Show()
+                local rowsNeeded = #visibleGoals
+                local h = SLOT_HEADER_H + 6 + math.max(rowsNeeded, 1) * (PICK_ROW_H + 4)
+                card:SetHeight(h)
+                card:ClearAllPoints()
+                card:SetPoint("TOPLEFT",  scrollChild, "TOPLEFT",  4, -y)
+                card:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -4, -y)
+                y = y + h + 8
+
+                card.count:SetText(rowsNeeded .. (rowsNeeded == 1 and " pick" or " picks"))
+
+                -- Ensure enough rows
+                while #card.rows < rowsNeeded do
+                    local row = MakePickRow(card, slotID)
+                    table.insert(card.rows, row)
+                end
+
+                -- Layout + render
+                for i, row in ipairs(card.rows) do
+                    if i <= rowsNeeded then
+                        row:ClearAllPoints()
+                        row:SetPoint("TOPLEFT",  card, "TOPLEFT",  6, -(SLOT_HEADER_H + 4 + (i-1) * (PICK_ROW_H + 4)))
+                        row:SetPoint("TOPRIGHT", card, "TOPRIGHT", -6, -(SLOT_HEADER_H + 4 + (i-1) * (PICK_ROW_H + 4)))
+                        row:SetHeight(PICK_ROW_H)
+                        RenderRow(row, slotID, visibleGoals[i])
+                        row:Show()
+                    else
+                        row:Hide()
+                    end
+                end
+
+                -- Empty-state: show a faint hint
+                if rowsNeeded == 0 then
+                    if not card.emptyText then
+                        card.emptyText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                        card.emptyText:SetPoint("CENTER", 0, -10)
+                        card.emptyText:SetTextColor(unpack(P.label))
+                        card.emptyText:SetText("No picks yet — click + to add")
+                    end
+                    card.emptyText:Show()
+                elseif card.emptyText then
+                    card.emptyText:Hide()
+                end
+            end
+        end
+
+        scrollChild:SetHeight(math.max(y + 8, scrollFrame:GetHeight()))
+    end
 
     -- Header char info — name, level, class. Loadout name is shown in the
     -- sidebar instead, since loadouts are user-named and may not match class.
@@ -1380,6 +1490,14 @@ end
 
 function UI:SetFilter(mode)
     filterMode = mode
+    UI:Refresh()
+end
+
+--- Switch the active top tab. Hides the panes that aren't active and
+--- triggers a refresh which re-renders the visible one.
+function UI:SetTab(name)
+    if name ~= "LOADOUT" and name ~= "RAIDS" and name ~= "LOOT LOG" then return end
+    activeTab = name
     UI:Refresh()
 end
 
@@ -1765,6 +1883,302 @@ function UI:RequestPhaseCopy()
 end
 
 -- ============================================================================
+-- RAIDS pane
+-- Same scroll-frame layout as LOADOUT, but rendered as one card per raid
+-- (parsed from the AtlasLoot source label) containing the picks that drop
+-- there. Items without a known source go into "Unknown source".
+-- ============================================================================
+
+local function BuildRaidsPane(parent)
+    local sf = CreateFrame("ScrollFrame", "ItemTrackerGearGoalsRaidsScroll",
+        parent, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT",     parent.filterRow, "BOTTOMLEFT", 0, -8)
+    sf:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -28, 8)
+    sf:Hide()
+
+    local sc = CreateFrame("Frame", nil, sf)
+    sc:SetSize(W - SIDEBAR_W - 50, 1)
+    sf:SetScrollChild(sc)
+    sf.scrollChild = sc
+    sf.cards       = {}    -- raidName -> card
+    return sf
+end
+
+--- Resolve the raid bucket label for an itemID by walking AtlasLoot's
+--- direct source first, then the token chain via Tokens. Falls back to
+--- "Unknown source" so items always end up in *some* bucket.
+RaidBucketFor = function(itemID)
+    local AL = IT.GearGoalsAtlasLoot
+    if not AL then return "Unknown source" end
+
+    local function fromSrc(src)
+        if not src then return nil end
+        if type(src.raid) == "string" and src.raid ~= "" then return src.raid end
+        if type(src.boss) == "string" and src.boss ~= "" then return src.boss end
+        return nil
+    end
+
+    local raidName = AL.GetSource and fromSrc(AL:GetSource(itemID))
+    if raidName then return raidName end
+
+    local Tokens = IT.GearGoalsTokens
+    if Tokens and Tokens.GetTokenFor then
+        local tokenID = Tokens:GetTokenFor(itemID)
+        if tokenID and AL.GetSource then
+            raidName = fromSrc(AL:GetSource(tokenID))
+            if raidName then return raidName end
+        end
+    end
+    return "Unknown source"
+end
+
+function UI:RenderRaidsPane()
+    local pane = frame.raidsPane
+    if not pane then return end
+    local GG    = IT.GearGoals
+    local spec  = viewLoadoutID or GG:GetMainLoadoutID()
+    local phase = GG:GetViewedPhase()
+
+    -- Gather goals grouped by raid bucket (in load-order so cards stay
+    -- stable across renders).
+    local byRaid, raidOrder = {}, {}
+    for _, slotID in ipairs(GG.SLOT_ORDER) do
+        for _, g in ipairs(GG:GetGoals(spec, phase, slotID)) do
+            local bucket = RaidBucketFor(g.itemID)
+            if not byRaid[bucket] then
+                byRaid[bucket] = {}
+                table.insert(raidOrder, bucket)
+            end
+            table.insert(byRaid[bucket], { slotID = slotID, goal = g })
+        end
+    end
+    table.sort(raidOrder, function(a, b)
+        if a == "Unknown source" then return false end
+        if b == "Unknown source" then return true end
+        return a < b
+    end)
+
+    -- Hide every pre-existing card; we'll re-show only the ones we render.
+    for _, c in pairs(pane.cards) do c:Hide() end
+
+    local y = 0
+    for _, raidName in ipairs(raidOrder) do
+        local card = pane.cards[raidName]
+        if not card then
+            card = CreatePanel(pane.scrollChild, P.surface)
+            AddBorder(card, P.border)
+            local headerBg = card:CreateTexture(nil, "BACKGROUND", nil, 1)
+            headerBg:SetPoint("TOPLEFT")
+            headerBg:SetPoint("TOPRIGHT")
+            headerBg:SetHeight(SLOT_HEADER_H)
+            SetColor(headerBg, P.surfaceAlt)
+            card.title = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            card.title:SetPoint("TOPLEFT", 12, -7)
+            card.title:SetTextColor(unpack(P.value))
+            card.count = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            card.count:SetPoint("TOPRIGHT", -12, -7)
+            card.count:SetTextColor(unpack(P.label))
+            card.rows = {}
+            pane.cards[raidName] = card
+        end
+
+        local entries = byRaid[raidName]
+        card.title:SetText(raidName)
+        card.count:SetText(#entries .. (#entries == 1 and " pick" or " picks"))
+
+        local rowsNeeded = #entries
+        local cardH = SLOT_HEADER_H + 6 + rowsNeeded * (PICK_ROW_H + 4)
+        card:SetHeight(cardH)
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT",  pane.scrollChild, "TOPLEFT",  4, -y)
+        card:SetPoint("TOPRIGHT", pane.scrollChild, "TOPRIGHT", -4, -y)
+        y = y + cardH + 8
+
+        while #card.rows < rowsNeeded do
+            table.insert(card.rows, MakePickRow(card, nil))   -- slotID set per render
+        end
+        for i, row in ipairs(card.rows) do
+            if i <= rowsNeeded then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT",  card, "TOPLEFT",  6,
+                    -(SLOT_HEADER_H + 4 + (i - 1) * (PICK_ROW_H + 4)))
+                row:SetPoint("TOPRIGHT", card, "TOPRIGHT", -6,
+                    -(SLOT_HEADER_H + 4 + (i - 1) * (PICK_ROW_H + 4)))
+                row:SetHeight(PICK_ROW_H)
+                local entry = entries[i]
+                RenderRow(row, entry.slotID, entry.goal)   -- sets row.slotID
+                row:Show()
+            else
+                row:Hide()
+            end
+        end
+        card:Show()
+    end
+
+    pane.scrollChild:SetHeight(math.max(y + 8, pane:GetHeight()))
+end
+
+-- ============================================================================
+-- LOOT LOG pane
+-- Filters IT.LootHistory:GetAll() to entries that match a goal on any
+-- loadout (direct or via token redemption). Each row: timestamp, item link,
+-- looter name, plus a small "<loadout> P<N> rank #N" tag per match.
+-- ============================================================================
+
+local LOG_ROW_H = 40
+
+--- Safe time-ago: LootDetector stamps entries with GetTime() (session-relative
+--- since server start). After /reload that resets, so old persisted entries
+--- can produce negative diffs. Clamp pathological values to "earlier" rather
+--- than print nonsense.
+local function SafeTimeAgo(ts)
+    if not ts or type(ts) ~= "number" then return "?" end
+    local now  = GetTime()
+    local diff = now - ts
+    if diff < 0 or diff > 86400 * 365 then
+        return "earlier"
+    end
+    return IT:FormatTimeAgo(ts)
+end
+
+local function BuildLootLogPane(parent)
+    local sf = CreateFrame("ScrollFrame", "ItemTrackerGearGoalsLootLogScroll",
+        parent, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT",     parent.filterRow, "BOTTOMLEFT", 0, -8)
+    sf:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -28, 8)
+    sf:Hide()
+
+    local sc = CreateFrame("Frame", nil, sf)
+    sc:SetSize(W - SIDEBAR_W - 50, 1)
+    sf:SetScrollChild(sc)
+    sf.scrollChild = sc
+    sf.rows        = {}
+
+    sf.empty = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sf.empty:SetPoint("CENTER")
+    sf.empty:SetText("No tracked drops yet.")
+    sf.empty:SetTextColor(unpack(P.label))
+    sf.empty:Hide()
+    return sf
+end
+
+local function MakeLogRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(LOG_ROW_H)
+    AddBackground(row, P.surfaceAlt)
+
+    -- Top row: time (left), item name (middle, expanding), looter (right)
+    row.time = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.time:SetPoint("TOPLEFT", 8, -6)
+    row.time:SetWidth(64)
+    row.time:SetJustifyH("LEFT")
+    row.time:SetTextColor(unpack(P.label))
+
+    row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.looter:SetPoint("TOPRIGHT", -8, -6)
+    row.looter:SetWidth(120)
+    row.looter:SetJustifyH("RIGHT")
+    row.looter:SetTextColor(unpack(P.label))
+
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.name:SetPoint("LEFT",  row.time,   "RIGHT", 8, 0)
+    row.name:SetPoint("RIGHT", row.looter, "LEFT", -8, 0)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+
+    -- Bottom row: tags spanning full width
+    row.tags = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.tags:SetPoint("BOTTOMLEFT",  8, 6)
+    row.tags:SetPoint("BOTTOMRIGHT", -8, 6)
+    row.tags:SetJustifyH("LEFT")
+    row.tags:SetWordWrap(false)
+    row.tags:SetTextColor(unpack(P.label))
+
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", function(self)
+        if self.itemLink then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink(self.itemLink)
+            GameTooltip:Show()
+        end
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return row
+end
+
+function UI:RenderLootLogPane()
+    local pane = frame.lootLogPane
+    if not pane then return end
+    local GG = IT.GearGoals
+    local LH = IT.LootHistory
+
+    local entries = (LH and LH.GetAll) and LH:GetAll() or {}
+    local Tokens  = IT.GearGoalsTokens
+
+    -- Build the list of matched (entry, matches) pairs in original order.
+    local matched = {}
+    for _, e in ipairs(entries) do
+        if e.itemID then
+            local list = GG:FindAllMatches(e.itemID)
+            if Tokens and Tokens:IsToken(e.itemID) then
+                for _, m in ipairs(GG:FindAllMatchesForToken(e.itemID)) do
+                    table.insert(list, m)
+                end
+            end
+            if #list > 0 then
+                table.insert(matched, { entry = e, matches = list })
+            end
+        end
+    end
+
+    if #matched == 0 then
+        pane.empty:Show()
+        for _, r in ipairs(pane.rows) do r:Hide() end
+        pane.scrollChild:SetHeight(pane:GetHeight())
+        return
+    end
+    pane.empty:Hide()
+
+    -- Render rows top-down
+    while #pane.rows < #matched do
+        table.insert(pane.rows, MakeLogRow(pane.scrollChild))
+    end
+
+    for i, row in ipairs(pane.rows) do
+        if i <= #matched then
+            local pair  = matched[i]
+            local entry = pair.entry
+            local _, _, quality = GetItemInfo(entry.itemID)
+            local r, g, b = IT:GetQualityColor(quality or entry.quality or 1)
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT",  pane.scrollChild, "TOPLEFT",  4, -((i - 1) * (LOG_ROW_H + 4)))
+            row:SetPoint("TOPRIGHT", pane.scrollChild, "TOPRIGHT", -4, -((i - 1) * (LOG_ROW_H + 4)))
+
+            row.itemLink = entry.itemLink
+            row.time:SetText(SafeTimeAgo(entry.timestamp))
+            row.name:SetText(entry.itemLink or ("Item " .. entry.itemID))
+            row.name:SetTextColor(r, g, b)
+            row.looter:SetText(entry.player or "—")
+
+            -- Match tags: "<loadoutName> P<N> rank #N", joined by " · "
+            local tagBits = {}
+            for _, m in ipairs(pair.matches) do
+                local lname = GG:GetLoadoutName(m.specKey) or m.specKey
+                local plabel = GG.PHASE_LABEL[m.phase] or m.phase
+                table.insert(tagBits, lname .. " " .. plabel .. " #" .. m.rank)
+            end
+            row.tags:SetText(table.concat(tagBits, " · "))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+
+    pane.scrollChild:SetHeight(math.max(#matched * (LOG_ROW_H + 4) + 8, pane:GetHeight()))
+end
+
+-- ============================================================================
 -- Build
 -- ============================================================================
 
@@ -1787,7 +2201,8 @@ function UI:Build()
     AddBackground(frame, P.bg)
 
     frame.header   = BuildHeader(frame)
-    frame.phaseBar = BuildPhaseBar(frame, frame.header)
+    frame.tabStrip = BuildTopTabs(frame, frame.header)
+    frame.phaseBar = BuildPhaseBar(frame, frame.tabStrip)
 
     -- Sidebar (left) and main pane (right)
     sidebar = BuildSidebar(frame, frame.phaseBar)
@@ -1798,7 +2213,9 @@ function UI:Build()
     frame.filterRow:SetPoint("TOPLEFT",  sidebar, "TOPRIGHT", 8, 0)
     frame.filterRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, 0)
 
-    -- Scroll area (right of sidebar, below filter row)
+    -- LOADOUT pane: the existing scrollFrame + slot cards. The same area
+    -- below the filter row is reused by the RAIDS and LOOT LOG panes via
+    -- show/hide in Refresh.
     scrollFrame = CreateFrame("ScrollFrame", "ItemTrackerGearGoalsScroll", frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT",     frame.filterRow, "BOTTOMLEFT", 0, -8)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, 8)
@@ -1807,15 +2224,22 @@ function UI:Build()
     scrollChild:SetSize(W - SIDEBAR_W - 50, 1)
     scrollFrame:SetScrollChild(scrollChild)
 
-    -- Slot cards (created lazily on first refresh, stored by slotID)
     for _, slotID in ipairs(IT.GearGoals.SLOT_ORDER) do
         slotCards[slotID] = MakeSlotCard(scrollChild, slotID)
     end
+    frame.loadoutPane = scrollFrame
+    frame.raidsPane   = BuildRaidsPane(frame)
+    frame.lootLogPane = BuildLootLogPane(frame)
 
     -- React to data changes
     IT.Events:Subscribe("GEAR_GOAL_LIST_CHANGED",     function() UI:Refresh() end)
     IT.Events:Subscribe("GEAR_GOALS_PHASE_CHANGED",   function() UI:Refresh() end)
     IT.Events:Subscribe("GEAR_GOALS_LOADOUT_CHANGED", function() UI:Refresh() end)
+    if IT.LootHistory then
+        IT.Events:Subscribe("HISTORY_UPDATED", function()
+            if activeTab == "LOOT LOG" then UI:Refresh() end
+        end)
+    end
 end
 
 function UI:Initialize()
