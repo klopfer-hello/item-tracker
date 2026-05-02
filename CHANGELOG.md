@@ -1,6 +1,6 @@
 # Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
 
-## Unreleased
+## v0.6.0
 
 ### New Features
 
