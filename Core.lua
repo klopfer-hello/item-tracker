@@ -359,6 +359,66 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
                 IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "), IT.Colors.warning)
             end
         end
+    elseif msg == "gear unsourced" or msg == "unsourced" then
+        -- List every itemID on this character's wishlist that the source-label
+        -- lookup currently can't resolve. Used to seed missing Tokens DB
+        -- entries for tier-set redemptions, vendor turn-ins, etc.
+        local AL = IT.GearGoalsAtlasLoot
+        if not AL or not IT.charDB or not IT.charDB.goals then
+            IT:Print("No goals or AtlasLoot module available.", IT.Colors.warning)
+            return
+        end
+        local seen, list = {}, {}
+        for loadoutID, byPhase in pairs(IT.charDB.goals) do
+            for phase, bySlot in pairs(byPhase) do
+                for slotID, goals in pairs(bySlot) do
+                    for _, g in ipairs(goals) do
+                        if g.itemID and not seen[g.itemID] then
+                            seen[g.itemID] = true
+                            local label = AL:GetSourceLabel(g.itemID)
+                            if not label then
+                                local name = GetItemInfo(g.itemID) or ("Item " .. g.itemID)
+                                table.insert(list, { id = g.itemID, name = name })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if #list == 0 then
+            IT:Print("All wishlist items resolve to a source. Nothing to report.", IT.Colors.success)
+        else
+            IT:Print("Wishlist items without an AtlasLoot / token-chain source:", IT.Colors.highlight)
+            for _, e in ipairs(list) do
+                IT:Print(string.format("  %d  %s", e.id, e.name), IT.Colors.info)
+            end
+            IT:Print("Paste the list to the developer to seed the Tokens DB.", IT.Colors.info)
+        end
+    elseif msg == "gear atlasloot-stats" or msg == "atlasloot-stats" then
+        local AL = IT.GearGoalsAtlasLoot
+        if not AL or not AL.GetReverseIndexStats then
+            IT:Print("GearGoals AtlasLoot module not available.", IT.Colors.warning)
+            return
+        end
+        local s = AL:GetReverseIndexStats(5)
+        IT:Print("---- AtlasLoot reverse index ----", IT.Colors.highlight)
+        IT:Print("AtlasLoot loaded:        " .. tostring(s.hasAtlasLoot), IT.Colors.info)
+        IT:Print("DungeonsAndRaids loaded: " .. tostring(s.drLoaded),     IT.Colors.info)
+        IT:Print("Storage keys:            " .. (#s.storageKeys > 0 and table.concat(s.storageKeys, ", ") or "(none)"), IT.Colors.info)
+        IT:Print("Reverse index size:      " .. tostring(s.indexSize),    IT.Colors.info)
+        if #s.samples == 0 then
+            IT:Print("No samples — index is empty.", IT.Colors.warning)
+        else
+            for _, e in ipairs(s.samples) do
+                local boss = e.boss or "?"
+                local raid = e.raid or "?"
+                IT:Print(string.format("  %d -> %s . %s", e.itemID, boss, raid), IT.Colors.info)
+            end
+        end
+        if AL.GetTBCAStatus then
+            local t = AL:GetTBCAStatus()
+            IT:Print("TBCA_BIS loaded:         " .. tostring(t.loaded) .. " (specs for player class: " .. tostring(t.specCount) .. ")", IT.Colors.info)
+        end
     elseif msg:match("^gear%s+copy") or msg:match("^copy%s+") then
         local from, to = msg:match("^gear%s+copy%s+(%S+)%s+(%S+)$")
         if not from then from, to = msg:match("^copy%s+(%S+)%s+(%S+)$") end
@@ -429,6 +489,8 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("  /it gear      - Toggle gear goals window", IT.Colors.info)
         IT:Print("  /it phase X   - Set current phase (pre-raid, 1, 2, 3, 3.5, 4)", IT.Colors.info)
         IT:Print("  /it gear copy <from> <to> - Copy a phase's picks (main loadout)", IT.Colors.info)
+        IT:Print("  /it gear atlasloot-stats - Diagnose AtlasLoot index/data", IT.Colors.info)
+        IT:Print("  /it gear unsourced - List wishlist items with no source label", IT.Colors.info)
         IT:Print("  /it clear     - Clear loot history", IT.Colors.info)
         IT:Print("  /it status    - Show integration status", IT.Colors.info)
         IT:Print("  /it test      - Simulate a loot drop", IT.Colors.info)

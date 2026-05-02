@@ -487,6 +487,37 @@ function GG:FindAllMatches(itemID)
     return out
 end
 
+--- For a dropped token, walk every goal on this character and return the
+--- goals whose item auto-derives back to that token. Used by the detector
+--- to convert a token drop into the user's actual wishlist matches without
+--- a per-item REDEMPTIONS table.
+--- Each entry: `{ specKey, phase, slotID, rank, goal }`.
+function GG:FindAllMatchesForToken(tokenID)
+    local out = {}
+    if not IT.charDB.goals or not tokenID then return out end
+    local Tokens = IT.GearGoalsTokens
+    if not Tokens or not Tokens.GetTokenFor then return out end
+
+    for specKey, sb in pairs(IT.charDB.goals) do
+        for phase, pb in pairs(sb) do
+            for slotID, list in pairs(pb) do
+                for _, g in ipairs(list) do
+                    if g.itemID and Tokens:GetTokenFor(g.itemID) == tokenID then
+                        table.insert(out, {
+                            specKey = specKey,
+                            phase   = phase,
+                            slotID  = slotID,
+                            rank    = g.rank,
+                            goal    = g,
+                        })
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 --- Determine which inventory slot an item should go into given its INVTYPE.
 function GG:ResolveSlotForItem(itemID)
     local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemID)

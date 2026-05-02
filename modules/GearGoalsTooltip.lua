@@ -47,15 +47,12 @@ local function AppendGoalLines(tooltip, itemID)
     local Tokens     = IT.GearGoalsTokens
     local tokenMatches = {}
     if Tokens and Tokens:IsToken(itemID) then
-        local redemptions = Tokens:GetRedemptions(itemID)
-        if redemptions then
-            for _, classItemID in ipairs(redemptions) do
-                for _, m in ipairs(GG:FindAllMatches(classItemID)) do
-                    m._redeemFrom = itemID
-                    m._goalItemID = classItemID
-                    table.insert(tokenMatches, m)
-                end
-            end
+        -- Hovering a token: surface every goal on this character whose
+        -- item auto-derives back to that token. Same logic the detector uses.
+        for _, m in ipairs(GG:FindAllMatchesForToken(itemID)) do
+            m._redeemFrom = itemID
+            m._goalItemID = m.goal.itemID
+            table.insert(tokenMatches, m)
         end
     end
 

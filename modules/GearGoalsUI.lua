@@ -937,7 +937,8 @@ local function RenderRow(row, slotID, goal)
     end
     row.ilvl:SetText(ilvl or "")
 
-    local sourceLabel = (IT.GearGoalsAtlasLoot and IT.GearGoalsAtlasLoot:GetSourceLabel(goal.itemID))
+    local sourceLabel = IT.GearGoalsAtlasLoot
+        and IT.GearGoalsAtlasLoot:GetSourceLabel(goal.itemID)
     row.source:SetText(sourceLabel or "")
 
     local spec   = viewLoadoutID or IT.GearGoals:GetMainLoadoutID()

@@ -78,13 +78,11 @@ local function CollectEligibleMatches(itemID)
     -- item it redeems for and look that up against goals.
     local Tokens = IT.GearGoalsTokens
     if Tokens and Tokens:IsToken(itemID) then
-        local redemptions = Tokens:GetRedemptions(itemID)
-        if redemptions then
-            for _, classItemID in ipairs(redemptions) do
-                for _, m in ipairs(GG:FindAllMatches(classItemID)) do
-                    tryGoal(m, classItemID, true)
-                end
-            end
+        -- Auto-derive: for every goal on this character, ask Tokens which
+        -- token (if any) it redeems from, and match against the dropped
+        -- itemID. No hand-curated REDEMPTIONS table needed.
+        for _, m in ipairs(GG:FindAllMatchesForToken(itemID)) do
+            tryGoal(m, m.goal.itemID, true)
         end
     end
 

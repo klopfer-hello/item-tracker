@@ -44,21 +44,30 @@ end
 -- We walk the tree once and produce a flat itemID -> { boss, raid } map.
 -- ============================================================================
 
+-- Storage keys we should skip when iterating an addon's content. Addons
+-- store both content nodes (instance tables) and helper functions / shared
+-- data on the same table; we want only instance nodes.
+local SKIP_STORAGE_KEYS = {
+    ["__atlaslootdata"] = true,
+}
+
 local function safeName(node)
     if not node then return nil end
-    if type(node.name) == "string" then return node.name end
+    if type(node.name) == "string" and node.name ~= "" then return node.name end
     return nil
 end
 
+--- Walk a boss-level table, harvesting itemIDs from every numeric-keyed
+--- difficulty bucket. Each bucket is an array of `{rank, payload, ...}` rows
+--- where the payload is an itemID (number) for real items or a string for
+--- header rows; we only keep the numeric payloads.
 local function walkBoss(bossName, raidName, bossNode)
     if type(bossNode) ~= "table" then return end
     for k, v in pairs(bossNode) do
-        if type(v) == "table" and type(k) ~= "string" then
-            -- Difficulty buckets (numeric keys); each holds the loot list
+        if type(k) == "number" and type(v) == "table" then
             for _, entry in ipairs(v) do
                 if type(entry) == "table" and type(entry[2]) == "number" then
                     local itemID = entry[2]
-                    -- First wins; don't overwrite (keeps highest-tier source)
                     if itemID and not sourceIndex[itemID] then
                         sourceIndex[itemID] = { boss = bossName, raid = raidName }
                     end
@@ -68,30 +77,70 @@ local function walkBoss(bossName, raidName, bossNode)
     end
 end
 
+--- Walk an instance content node. AtlasLoot stores the boss list under
+--- `instanceNode.items` (numeric-indexed array); each element is a boss
+--- with its own `.name` and difficulty buckets. Some content nodes (like
+--- KEYS tables in dungeons-and-raids) also place difficulty buckets
+--- directly on the instance node, so we walk both shapes.
+local function walkInstance(raidName, instanceNode)
+    if type(instanceNode) ~= "table" then return end
+
+    if type(instanceNode.items) == "table" then
+        for _, boss in ipairs(instanceNode.items) do
+            if type(boss) == "table" then
+                local bossName = safeName(boss) or raidName
+                walkBoss(bossName, raidName, boss)
+            end
+        end
+    end
+
+    -- Fallback: difficulty buckets sometimes live directly on the node
+    -- (typical of KEYS / loose-items entries with no nested boss list).
+    walkBoss(raidName, raidName, instanceNode)
+end
+
+-- Sibling AtlasLoot plugins that contribute additional source data beyond
+-- raw boss drops: tier-set vendors, reputation rewards, PvP / honor items,
+-- crafted gear. Most are LoadOnDemand and are dormant until needed; we
+-- force-load them so their data shows up in `Storage` for the walker.
+local SIBLING_PLUGINS = {
+    "AtlasLootClassic_Factions",
+    "AtlasLootClassic_PvP",
+    "AtlasLootClassic_Crafting",
+    "AtlasLootClassic_Collections",
+}
+
+local siblingsLoaded = false
+
+local function ensureSiblingsLoaded()
+    if siblingsLoaded then return end
+    siblingsLoaded = true
+    if not LoadAddOn then return end
+    for _, name in ipairs(SIBLING_PLUGINS) do
+        if not (IsAddOnLoaded and IsAddOnLoaded(name)) then
+            pcall(LoadAddOn, name)
+        end
+    end
+end
+
 local function buildIndex()
     indexBuilt = true
     sourceIndex = {}
     if not AL:IsLoaded() then return end
 
+    ensureSiblingsLoaded()
+
     local ok, db = pcall(function() return _G.AtlasLoot.ItemDB.Storage end)
     if not ok or not db then return end
 
-    for addonKey, addonData in pairs(db) do
+    for _, addonData in pairs(db) do
         if type(addonData) == "table" then
-            for contentName, contentNode in pairs(addonData) do
-                if type(contentNode) == "table" and type(contentName) == "string" then
-                    -- contentNode often has nested boss tables; walk one level
-                    local raidName = safeName(contentNode) or contentName
-                    for _, child in pairs(contentNode) do
-                        if type(child) == "table" then
-                            local bossName = safeName(child)
-                            if bossName then
-                                pcall(walkBoss, bossName, raidName, child)
-                            end
-                        end
-                    end
-                    -- Also try direct loot at this level
-                    pcall(walkBoss, raidName, raidName, contentNode)
+            for contentKey, contentNode in pairs(addonData) do
+                if type(contentNode) == "table"
+                   and type(contentKey) == "string"
+                   and not SKIP_STORAGE_KEYS[contentKey] then
+                    local raidName = safeName(contentNode) or contentKey
+                    pcall(walkInstance, raidName, contentNode)
                 end
             end
         end
@@ -108,13 +157,124 @@ function AL:GetSource(itemID)
     return sourceIndex and sourceIndex[itemID]
 end
 
-function AL:GetSourceLabel(itemID)
-    local src = self:GetSource(itemID)
+--- Force a (re)build of the reverse index now and return the resulting size.
+--- Used by `/it gear atlasloot-stats` to bypass the lazy gate.
+function AL:BuildIndexNow()
+    indexBuilt = false
+    buildIndex()
+    if not sourceIndex then return 0 end
+    local n = 0
+    for _ in pairs(sourceIndex) do n = n + 1 end
+    return n
+end
+
+--- Diagnostic snapshot of the index — for debugging the boss/raid walker.
+--- Returns: { hasAtlasLoot, drInLoaded, indexSize, samples = {{itemID, boss, raid}, ...} }
+function AL:GetReverseIndexStats(sampleSize)
+    sampleSize = sampleSize or 5
+    local stats = {
+        hasAtlasLoot = self:IsLoaded(),
+        drLoaded     = (IsAddOnLoaded and IsAddOnLoaded("AtlasLootClassic_DungeonsAndRaids")) or false,
+        storageKeys  = {},
+        indexSize    = 0,
+        samples      = {},
+    }
+    if _G.AtlasLoot and _G.AtlasLoot.ItemDB and _G.AtlasLoot.ItemDB.Storage then
+        for k in pairs(_G.AtlasLoot.ItemDB.Storage) do
+            table.insert(stats.storageKeys, tostring(k))
+        end
+    end
+    stats.indexSize = self:BuildIndexNow()
+    if sourceIndex then
+        local taken = 0
+        for itemID, src in pairs(sourceIndex) do
+            if taken >= sampleSize then break end
+            table.insert(stats.samples, {
+                itemID = itemID,
+                boss   = src.boss,
+                raid   = src.raid,
+            })
+            taken = taken + 1
+        end
+    end
+    return stats
+end
+
+local function formatSourceLabel(src)
     if not src then return nil end
     if src.boss and src.raid and src.boss ~= src.raid then
         return src.boss .. " · " .. src.raid
     end
     return src.boss or src.raid
+end
+
+-- ============================================================================
+-- Tier-set redemption fallback
+--
+-- AtlasLoot's `DungeonsAndRaids` data describes T4/T5/T6 sets via *set IDs*
+-- (e.g. setID 645 = Warlock T4 Voidheart) — not the individual itemIDs in
+-- those sets — so the reverse-index walker can't label tier-set pieces
+-- directly. WoW's `GetItemInfo(itemID)` returns the `setID` (16th return,
+-- and nil for non-set items), which we cross-reference against the static
+-- list of T4/T5/T6 set IDs lifted from
+-- AtlasLootClassic_DungeonsAndRaids/data-tbc.lua (lines 79-158).
+-- ============================================================================
+
+local TIER_SET_IDS = {
+    T4 = { 645, 663, 664, 621, 651, 654, 655, 648, 638, 639, 640, 631, 632, 633, 624, 625, 626 },
+    T5 = { 646, 665, 666, 622, 652, 656, 657, 649, 642, 643, 641, 634, 635, 636, 627, 628, 629 },
+    T6 = { 670, 675, 674, 668, 669, 673, 672, 671, 678, 677, 676, 683, 684, 682, 681, 679, 680 },
+}
+
+local TIER_LABEL = {
+    T4 = "Tier 4 token vendor (Kara . Gruul . Mag)",
+    T5 = "Tier 5 token vendor (SSC . Tempest Keep)",
+    T6 = "Tier 6 token vendor (Hyjal . Black Temple)",
+}
+
+-- Build setID -> tier reverse map at file load.
+local SET_TO_TIER = {}
+for tier, ids in pairs(TIER_SET_IDS) do
+    for _, sid in ipairs(ids) do
+        SET_TO_TIER[sid] = tier
+    end
+end
+
+local function tierLabelFor(itemID)
+    if not itemID then return nil end
+    -- 16th return of GetItemInfo is setID (or nil for non-set items).
+    -- Items not yet in the WoW client cache return nothing; the tooltip /
+    -- chat / loot hooks in the autocomplete cache pre-warm most of these.
+    local setID = select(16, GetItemInfo(itemID))
+    if type(setID) ~= "number" or setID <= 0 then return nil end
+    local tier = SET_TO_TIER[setID]
+    return tier and TIER_LABEL[tier] or nil
+end
+
+--- Resolve a `boss · raid` (or single-name) label for an itemID.
+--- Lookup priority:
+---   1. Direct lookup in the AtlasLoot reverse index.
+---   2. Hardcoded Tokens DB chain: if `IT.GearGoalsTokens` knows this item
+---      is the explicit redemption of a class token, inherit the token's
+---      source (e.g. Cyclone Helm via Helm of the Fallen Hero, when the
+---      Tokens DB maps that itemID to that token).
+---   3. Tier-set membership fallback: if WoW's set API recognises this
+---      item as a member of a T4/T5/T6 set, return a generic tier label.
+---      Covers every tier-set piece without per-item DB maintenance.
+function AL:GetSourceLabel(itemID)
+    local label = formatSourceLabel(self:GetSource(itemID))
+    if label then return label end
+
+    local Tokens = IT.GearGoalsTokens
+    if Tokens and Tokens.GetTokenFor then
+        local tokenID = Tokens:GetTokenFor(itemID)
+        if tokenID then
+            label = formatSourceLabel(self:GetSource(tokenID))
+            if label then return label end
+        end
+    end
+
+    return tierLabelFor(itemID)
 end
 
 -- ============================================================================

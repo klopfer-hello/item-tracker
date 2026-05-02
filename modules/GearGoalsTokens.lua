@@ -1,24 +1,26 @@
 --[[
     ItemTracker - GearGoalsTokens Module
-    Single Responsibility: Map class-tokens (e.g. "Helm of the Fallen Hero")
-    to the class-specific items they can be exchanged for. Used so that a
-    token drop in the raid triggers a notification when the *redeemed* item
-    is the user's actual goal.
+    Single Responsibility: Map a tier-set class item to the class-token that
+    redeems for it (and back), so a token drop in the raid triggers a
+    notification on every wishlist item it can be exchanged into.
+
+    Auto-derivation, no per-item hardcoding:
+
+      GetItemInfo(itemID) returns
+          equipLoc (9th)  -> piece slot (Helm / Pauldrons / Chestguard / ...)
+          setID    (16th) -> static AtlasLoot tier-set ID
+
+      setID -> { tier, class }    (table below, lifted from
+                                   AtlasLootClassic_DungeonsAndRaids/data-tbc.lua)
+      class -> token group        (Champion/Hero/Defender for T4-T5,
+                                   Conqueror/Protector/Vanquisher for T6)
+      (tier, group, slot) -> token itemID  (table below; from grepping the
+                                            same data file for token names)
 
     Public API:
-        Tokens:IsToken(itemID)               -> boolean
-        Tokens:GetRedemptions(tokenID)        -> { itemID, ... } or nil
-        Tokens:GetTokenFor(classItemID)       -> tokenID or nil  (reverse lookup)
-        Tokens:GetSourceTokenLabel(tokenID)   -> short token name for UI
-
-    The dataset below covers the T4 / T5 / T6 set tokens — by far the most
-    common "redeemable" drops in TBC Anniversary. Sunwell vendor upgrade
-    tokens (P4) are not included in MVP; add as needed.
-
-    NOTE: itemIDs are stable across TBC clients but should be cross-checked
-    against the in-game tooltip if a redemption stops triggering. A wrong
-    redemption ID just means a token won't match a class item — never a false
-    positive — so over-coverage is safer than under-coverage.
+        Tokens:IsToken(itemID)        -> boolean
+        Tokens:GetTokenFor(itemID)    -> tokenID | nil
+        Tokens:GetSourceTokenLabel(t) -> short label string
 ]]
 
 local _, IT = ...
@@ -26,200 +28,228 @@ local Tokens = {}
 IT.GearGoalsTokens = Tokens
 
 -- ============================================================================
--- Token redemption table
--- Format: [tokenID] = { classItemID, classItemID, ... }
--- One token redeems for one item per eligible class within the token's group.
+-- Token IDs by (tier, group, slot)
+-- Source: AtlasLootClassic_DungeonsAndRaids/data-tbc.lua (boss tables).
+-- T4 / T5 use Champion / Hero / Defender; T6 uses Conqueror / Protector /
+-- Vanquisher (and adds Sunwell vendor pieces for Bracers / Belt / Boots).
 -- ============================================================================
 
--- T4 set tokens — drop in Karazhan / Gruul / Magtheridon
--- Champion = Druid / Mage / Rogue
--- Hero     = Hunter / Paladin / Shaman / Warlock
--- Defender = Priest / Warrior
-
-Tokens.REDEMPTIONS = {
-
-    --[[ ------------------------------ T4 ------------------------------ ]]
-
-    -- Helm of the Fallen Champion (Druid / Mage / Rogue)
-    [29760] = {
-        29093,   -- Cowl of Tirisfal (Mage)
-        28744,   -- Cowl of Malorne (Druid - Restoration / Balance)
-        29086,   -- Mask of the Fallen Defender (Druid - Feral)  -- placeholder, see note
-        28265,   -- Deathmantle Cap (Rogue)
+local TOKEN_BY_TIER_GROUP_SLOT = {
+    T4 = {
+        Champion = { Helm = 29760, Pauldrons = 29763, Chestguard = 29754, Gloves = 29757, Leggings = 29766 },
+        Hero     = { Helm = 29759, Pauldrons = 29762, Chestguard = 29755, Gloves = 29756, Leggings = 29765 },
+        Defender = { Helm = 29761, Pauldrons = 29764, Chestguard = 29753, Gloves = 29758, Leggings = 29767 },
     },
-    -- Helm of the Fallen Hero (Hunter / Paladin / Shaman / Warlock)
-    [29761] = {
-        29028,   -- Cyclone Helm (Resto Shaman)
-        28963,   -- Cataclysm Headpiece (Ele Shaman)
-        28795,   -- Cataclysm Helm (Enh Shaman)
-        28275,   -- Demon Stalker Greathelm (Hunter)
-        28799,   -- Crown of the Forgotten Kings (Holy Paladin)
-        29072,   -- Crown of the Forgotten Protector (Prot Paladin)
-        28823,   -- Crown of the Forgotten Conqueror (Ret Paladin)
-        29081,   -- Voidheart Crown (Warlock)
+    T5 = {
+        Champion = { Helm = 30242, Pauldrons = 30248, Chestguard = 30236, Gloves = 30239, Leggings = 30245 },
+        Hero     = { Helm = 30244, Pauldrons = 30250, Chestguard = 30238, Gloves = 30241, Leggings = 30247 },
+        Defender = { Helm = 30243, Pauldrons = 30249, Chestguard = 30237, Gloves = 30240, Leggings = 30246 },
     },
-    -- Helm of the Fallen Defender (Priest / Warrior)
-    [29759] = {
-        28963,   -- Incarnate Cowl (Priest - Holy)  -- placeholder
-        29059,   -- Avatar Helmet (Warrior - Prot)
-        29011,   -- Warbringer Greathelm (Warrior - Arms/Fury)  -- placeholder
-        28749,   -- Cowl of the Tempest (Priest - Shadow)
+    T6 = {
+        Conqueror  = { Helm = 31097, Pauldrons = 31101, Chestguard = 31089, Gloves = 31092, Leggings = 31098,
+                       Bracers = 34848, Belt = 34853, Boots = 34856 },
+        Protector  = { Helm = 31095, Pauldrons = 31103, Chestguard = 31091, Gloves = 31094, Leggings = 31100,
+                       Bracers = 34851, Belt = 34854, Boots = 34857 },
+        Vanquisher = { Helm = 31096, Pauldrons = 31102, Chestguard = 31090, Gloves = 31093, Leggings = 31099,
+                       Bracers = 34852, Belt = 34855, Boots = 34858 },
     },
-
-    -- Pauldrons of the Fallen Champion (Druid / Mage / Rogue)
-    [29756] = {
-        29094,   -- Mantle of Tirisfal (Mage)
-        28746,   -- Mantle of Malorne (Druid - Restoration / Balance)
-        28266,   -- Deathmantle Shoulderpads (Rogue)
-    },
-    -- Pauldrons of the Fallen Hero (Hunter / Paladin / Shaman / Warlock)
-    [29757] = {
-        29030,   -- Cyclone Shoulderpads (Resto Shaman)
-        28966,   -- Cataclysm Shoulderpads (Ele Shaman)
-        28797,   -- Cataclysm Shoulderguards (Enh Shaman)
-        28277,   -- Demon Stalker Spaulders (Hunter)
-        28801,   -- Pauldrons of the Forgotten Kings (Holy Paladin)
-        29074,   -- Pauldrons of the Forgotten Protector (Prot Paladin)
-        28824,   -- Pauldrons of the Forgotten Conqueror (Ret Paladin)
-        29082,   -- Voidheart Mantle (Warlock)
-    },
-    -- Pauldrons of the Fallen Defender (Priest / Warrior)
-    [29755] = {
-        28767,   -- Incarnate Pauldrons (Priest)
-        29013,   -- Warbringer Shoulderplates (Warrior - Arms/Fury)
-        29062,   -- Avatar Shoulderplates (Warrior - Prot)
-    },
-
-    -- Chestguard of the Fallen Champion (Druid / Mage / Rogue)
-    [29753] = {
-        29089,   -- Robes of Tirisfal (Mage)
-        28741,   -- Chestguard of Malorne (Druid)
-        28267,   -- Deathmantle Chestguard (Rogue)
-    },
-    -- Chestguard of the Fallen Hero (Hunter / Paladin / Shaman / Warlock)
-    [29754] = {
-        28968,   -- Cyclone Hauberk (Resto Shaman)
-        28960,   -- Cataclysm Hauberk (Ele Shaman)
-        28793,   -- Cataclysm Chestpiece (Enh Shaman)
-        28272,   -- Demon Stalker Hauberk (Hunter)
-        28793,   -- Chestguard of the Forgotten Kings (Holy Paladin)
-        29067,   -- Chestguard of the Forgotten Protector (Prot Paladin)
-        28820,   -- Chestguard of the Forgotten Conqueror (Ret Paladin)
-        29078,   -- Voidheart Robe (Warlock)
-    },
-    -- Chestguard of the Fallen Defender (Priest / Warrior)
-    [29752] = {
-        28767,   -- Incarnate Chestguard (Priest)
-        29011,   -- Warbringer Breastplate (Warrior - Arms/Fury)
-        29057,   -- Avatar Chestguard (Warrior - Prot)
-    },
-
-    -- Gauntlets of the Fallen Champion (Druid / Mage / Rogue)
-    [29764] = {
-        29091,   -- Gloves of Tirisfal (Mage)
-        28742,   -- Gloves of Malorne (Druid)
-        28269,   -- Deathmantle Handguards (Rogue)
-    },
-    -- Gauntlets of the Fallen Hero (Hunter / Paladin / Shaman / Warlock)
-    [29765] = {
-        29027,   -- Cyclone Gloves (Resto Shaman)
-        28962,   -- Cataclysm Handguards (Ele Shaman)
-        28794,   -- Cataclysm Gauntlets (Enh Shaman)
-        28273,   -- Demon Stalker Handguards (Hunter)
-        28796,   -- Gauntlets of the Forgotten Kings (Holy Paladin)
-        29070,   -- Gauntlets of the Forgotten Protector (Prot Paladin)
-        28821,   -- Gauntlets of the Forgotten Conqueror (Ret Paladin)
-        29079,   -- Voidheart Gloves (Warlock)
-    },
-    -- Gauntlets of the Fallen Defender (Priest / Warrior)
-    [29763] = {
-        28765,   -- Incarnate Gloves (Priest)
-        29010,   -- Warbringer Gauntlets (Warrior - Arms/Fury)
-        29058,   -- Avatar Gauntlets (Warrior - Prot)
-    },
-
-    -- Leggings of the Fallen Champion (Druid / Mage / Rogue)
-    [29768] = {
-        29092,   -- Trousers of Tirisfal (Mage)
-        28743,   -- Trousers of Malorne (Druid)
-        28270,   -- Deathmantle Leggings (Rogue)
-    },
-    -- Leggings of the Fallen Hero (Hunter / Paladin / Shaman / Warlock)
-    [29769] = {
-        29029,   -- Cyclone Kilt (Resto Shaman)
-        28964,   -- Cataclysm Leggings (Ele Shaman)
-        28798,   -- Cataclysm Legguards (Enh Shaman)
-        28276,   -- Demon Stalker Greaves (Hunter)
-        28800,   -- Legplates of the Forgotten Kings (Holy Paladin)
-        29073,   -- Legplates of the Forgotten Protector (Prot Paladin)
-        28822,   -- Legplates of the Forgotten Conqueror (Ret Paladin)
-        29080,   -- Voidheart Leggings (Warlock)
-    },
-    -- Leggings of the Fallen Defender (Priest / Warrior)
-    [29767] = {
-        28766,   -- Incarnate Leggings (Priest)
-        29012,   -- Warbringer Legplates (Warrior - Arms/Fury)
-        29061,   -- Avatar Legplates (Warrior - Prot)
-    },
-
-    --[[
-        T5 (SSC / TK) and T6 (Hyjal / BT) tokens follow the same shape with
-        different itemIDs. Adding incrementally as needed; the framework here
-        will cover them once data is filled in. Open an issue with the goal
-        item that didn't notify and we'll add the redemption.
-    ]]
 }
 
--- ============================================================================
--- Token name overrides (optional pretty-print for the popup)
--- ============================================================================
-
+-- Pretty labels for the popup / tooltip lines.
 Tokens.LABELS = {
-    [29759] = "Helm of the Fallen Defender",
+    -- T4
     [29760] = "Helm of the Fallen Champion",
-    [29761] = "Helm of the Fallen Hero",
-    [29755] = "Pauldrons of the Fallen Defender",
-    [29756] = "Pauldrons of the Fallen Champion",
-    [29757] = "Pauldrons of the Fallen Hero",
-    [29752] = "Chestguard of the Fallen Defender",
-    [29753] = "Chestguard of the Fallen Champion",
-    [29754] = "Chestguard of the Fallen Hero",
-    [29763] = "Gauntlets of the Fallen Defender",
-    [29764] = "Gauntlets of the Fallen Champion",
-    [29765] = "Gauntlets of the Fallen Hero",
+    [29761] = "Helm of the Fallen Defender",
+    [29759] = "Helm of the Fallen Hero",
+    [29763] = "Pauldrons of the Fallen Champion",
+    [29764] = "Pauldrons of the Fallen Defender",
+    [29762] = "Pauldrons of the Fallen Hero",
+    [29754] = "Chestguard of the Fallen Champion",
+    [29753] = "Chestguard of the Fallen Defender",
+    [29755] = "Chestguard of the Fallen Hero",
+    [29757] = "Gloves of the Fallen Champion",
+    [29758] = "Gloves of the Fallen Defender",
+    [29756] = "Gloves of the Fallen Hero",
+    [29766] = "Leggings of the Fallen Champion",
     [29767] = "Leggings of the Fallen Defender",
-    [29768] = "Leggings of the Fallen Champion",
-    [29769] = "Leggings of the Fallen Hero",
+    [29765] = "Leggings of the Fallen Hero",
+    -- T5
+    [30242] = "Helm of the Vanquished Champion",
+    [30243] = "Helm of the Vanquished Defender",
+    [30244] = "Helm of the Vanquished Hero",
+    [30248] = "Pauldrons of the Vanquished Champion",
+    [30249] = "Pauldrons of the Vanquished Defender",
+    [30250] = "Pauldrons of the Vanquished Hero",
+    [30236] = "Chestguard of the Vanquished Champion",
+    [30237] = "Chestguard of the Vanquished Defender",
+    [30238] = "Chestguard of the Vanquished Hero",
+    [30239] = "Gloves of the Vanquished Champion",
+    [30240] = "Gloves of the Vanquished Defender",
+    [30241] = "Gloves of the Vanquished Hero",
+    [30245] = "Leggings of the Vanquished Champion",
+    [30246] = "Leggings of the Vanquished Defender",
+    [30247] = "Leggings of the Vanquished Hero",
+    -- T6
+    [31097] = "Helm of the Forgotten Conqueror",
+    [31095] = "Helm of the Forgotten Protector",
+    [31096] = "Helm of the Forgotten Vanquisher",
+    [31101] = "Pauldrons of the Forgotten Conqueror",
+    [31103] = "Pauldrons of the Forgotten Protector",
+    [31102] = "Pauldrons of the Forgotten Vanquisher",
+    [31089] = "Chestguard of the Forgotten Conqueror",
+    [31091] = "Chestguard of the Forgotten Protector",
+    [31090] = "Chestguard of the Forgotten Vanquisher",
+    [31092] = "Gloves of the Forgotten Conqueror",
+    [31094] = "Gloves of the Forgotten Protector",
+    [31093] = "Gloves of the Forgotten Vanquisher",
+    [31098] = "Leggings of the Forgotten Conqueror",
+    [31100] = "Leggings of the Forgotten Protector",
+    [31099] = "Leggings of the Forgotten Vanquisher",
+    [34848] = "Bracers of the Forgotten Conqueror",
+    [34851] = "Bracers of the Forgotten Protector",
+    [34852] = "Bracers of the Forgotten Vanquisher",
+    [34853] = "Belt of the Forgotten Conqueror",
+    [34854] = "Belt of the Forgotten Protector",
+    [34855] = "Belt of the Forgotten Vanquisher",
+    [34856] = "Boots of the Forgotten Conqueror",
+    [34857] = "Boots of the Forgotten Protector",
+    [34858] = "Boots of the Forgotten Vanquisher",
 }
+
+-- ============================================================================
+-- Set ID -> { tier, class }
+-- AtlasLoot's T4_SET / T5_SET / T6_SET tables list every class+spec set ID
+-- with a class comment; this map is a transcription of those.
+-- ============================================================================
+
+local SET_TO_TIER_CLASS = {
+    -- T4
+    [645] = { tier = "T4", class = "WARLOCK" },
+    [663] = { tier = "T4", class = "PRIEST"  },
+    [664] = { tier = "T4", class = "PRIEST"  },
+    [621] = { tier = "T4", class = "ROGUE"   },
+    [651] = { tier = "T4", class = "HUNTER"  },
+    [654] = { tier = "T4", class = "WARRIOR" },
+    [655] = { tier = "T4", class = "WARRIOR" },
+    [648] = { tier = "T4", class = "MAGE"    },
+    [638] = { tier = "T4", class = "DRUID"   },
+    [639] = { tier = "T4", class = "DRUID"   },
+    [640] = { tier = "T4", class = "DRUID"   },
+    [631] = { tier = "T4", class = "SHAMAN"  },
+    [632] = { tier = "T4", class = "SHAMAN"  },
+    [633] = { tier = "T4", class = "SHAMAN"  },
+    [624] = { tier = "T4", class = "PALADIN" },
+    [625] = { tier = "T4", class = "PALADIN" },
+    [626] = { tier = "T4", class = "PALADIN" },
+    -- T5
+    [646] = { tier = "T5", class = "WARLOCK" },
+    [665] = { tier = "T5", class = "PRIEST"  },
+    [666] = { tier = "T5", class = "PRIEST"  },
+    [622] = { tier = "T5", class = "ROGUE"   },
+    [652] = { tier = "T5", class = "HUNTER"  },
+    [656] = { tier = "T5", class = "WARRIOR" },
+    [657] = { tier = "T5", class = "WARRIOR" },
+    [649] = { tier = "T5", class = "MAGE"    },
+    [642] = { tier = "T5", class = "DRUID"   },
+    [643] = { tier = "T5", class = "DRUID"   },
+    [641] = { tier = "T5", class = "DRUID"   },
+    [634] = { tier = "T5", class = "SHAMAN"  },
+    [635] = { tier = "T5", class = "SHAMAN"  },
+    [636] = { tier = "T5", class = "SHAMAN"  },
+    [627] = { tier = "T5", class = "PALADIN" },
+    [628] = { tier = "T5", class = "PALADIN" },
+    [629] = { tier = "T5", class = "PALADIN" },
+    -- T6
+    [670] = { tier = "T6", class = "WARLOCK" },
+    [675] = { tier = "T6", class = "PRIEST"  },
+    [674] = { tier = "T6", class = "PRIEST"  },
+    [668] = { tier = "T6", class = "ROGUE"   },
+    [669] = { tier = "T6", class = "HUNTER"  },
+    [673] = { tier = "T6", class = "WARRIOR" },
+    [672] = { tier = "T6", class = "WARRIOR" },
+    [671] = { tier = "T6", class = "MAGE"    },
+    [678] = { tier = "T6", class = "DRUID"   },
+    [677] = { tier = "T6", class = "DRUID"   },
+    [676] = { tier = "T6", class = "DRUID"   },
+    [683] = { tier = "T6", class = "SHAMAN"  },
+    [684] = { tier = "T6", class = "SHAMAN"  },
+    [682] = { tier = "T6", class = "SHAMAN"  },
+    [681] = { tier = "T6", class = "PALADIN" },
+    [679] = { tier = "T6", class = "PALADIN" },
+    [680] = { tier = "T6", class = "PALADIN" },
+}
+
+-- Class -> token group per tier
+local GROUP_T4_T5 = {
+    DRUID = "Champion", MAGE = "Champion", ROGUE = "Champion",
+    HUNTER = "Hero", PALADIN = "Hero", SHAMAN = "Hero", WARLOCK = "Hero",
+    PRIEST = "Defender", WARRIOR = "Defender",
+}
+
+local GROUP_T6 = {
+    PALADIN = "Conqueror", PRIEST = "Conqueror", WARLOCK = "Conqueror",
+    HUNTER = "Protector", SHAMAN = "Protector", WARRIOR = "Protector",
+    DRUID = "Vanquisher", MAGE = "Vanquisher", ROGUE = "Vanquisher",
+}
+
+-- equipLoc -> piece-slot key
+local SLOT_KEY = {
+    INVTYPE_HEAD     = "Helm",
+    INVTYPE_SHOULDER = "Pauldrons",
+    INVTYPE_CHEST    = "Chestguard",
+    INVTYPE_ROBE     = "Chestguard",
+    INVTYPE_HAND     = "Gloves",
+    INVTYPE_LEGS     = "Leggings",
+    INVTYPE_WRIST    = "Bracers",
+    INVTYPE_WAIST    = "Belt",
+    INVTYPE_FEET     = "Boots",
+}
+
+-- ============================================================================
+-- Set of all token IDs for the fast IsToken check.
+-- ============================================================================
+
+local ALL_TOKEN_IDS = {}
+for _, byGroup in pairs(TOKEN_BY_TIER_GROUP_SLOT) do
+    for _, bySlot in pairs(byGroup) do
+        for _, id in pairs(bySlot) do
+            if id then ALL_TOKEN_IDS[id] = true end
+        end
+    end
+end
 
 -- ============================================================================
 -- Public API
 -- ============================================================================
 
 function Tokens:IsToken(itemID)
-    return Tokens.REDEMPTIONS[itemID] ~= nil
+    return itemID ~= nil and ALL_TOKEN_IDS[itemID] == true
 end
 
-function Tokens:GetRedemptions(tokenID)
-    return Tokens.REDEMPTIONS[tokenID]
-end
+--- Resolve the class-token that redeems for `itemID`. Returns nil for
+--- non-set items, items not yet in the WoW client cache, or set/slot
+--- combinations that don't have a known token. Returns nil for items in
+--- non-tracked classes too (e.g. Death Knight items, if any leak through).
+function Tokens:GetTokenFor(itemID)
+    if not itemID then return nil end
 
-local reverseIndex   -- classItemID -> tokenID
-local function BuildReverse()
-    reverseIndex = {}
-    for tokenID, items in pairs(Tokens.REDEMPTIONS) do
-        for _, classItemID in ipairs(items) do
-            -- First wins (a class item is normally the redemption of exactly one token)
-            if not reverseIndex[classItemID] then
-                reverseIndex[classItemID] = tokenID
-            end
-        end
-    end
-end
+    local _, _, _, _, _, _, _, _, equipLoc,
+          _, _, _, _, _, _, setID = GetItemInfo(itemID)
+    if type(setID) ~= "number" or setID <= 0 then return nil end
 
-function Tokens:GetTokenFor(classItemID)
-    if not reverseIndex then BuildReverse() end
-    return reverseIndex[classItemID]
+    local mapping = SET_TO_TIER_CLASS[setID]
+    if not mapping then return nil end
+
+    local groupMap = (mapping.tier == "T6") and GROUP_T6 or GROUP_T4_T5
+    local group    = groupMap[mapping.class]
+    if not group then return nil end
+
+    local slotKey = SLOT_KEY[equipLoc]
+    if not slotKey then return nil end
+
+    local tier = TOKEN_BY_TIER_GROUP_SLOT[mapping.tier]
+    if not tier or not tier[group] then return nil end
+    return tier[group][slotKey]
 end
 
 function Tokens:GetSourceTokenLabel(tokenID)
@@ -227,5 +257,5 @@ function Tokens:GetSourceTokenLabel(tokenID)
 end
 
 function Tokens:Initialize()
-    -- Reverse index builds lazily on first call.
+    -- Nothing to do at load time.
 end
