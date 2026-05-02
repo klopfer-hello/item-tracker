@@ -56,6 +56,14 @@ local function CollectEligibleMatches(itemID)
         local phaseAllowed = (rawMatch.phase == currentPhase) or (rawMatch.phase == "pre-raid")
         if not phaseAllowed then return end
         if not GG:CanNotify(rawMatch.specKey, rawMatch.phase, rawMatch.slotID, rawMatch.rank) then return end
+        -- Suppress when the player already owns or wears the goal item.
+        -- Otherwise a token drop pops up for every wishlist entry it
+        -- redeems for, including pieces sitting in the bank or already
+        -- equipped (the user explicitly flagged this as noise).
+        if GG.IsItemOwned and GG:IsItemOwned(rawMatch.slotID, goalItemID,
+                                              rawMatch.goal and rawMatch.goal.obtained) then
+            return
+        end
         table.insert(out, {
             loadoutID  = rawMatch.specKey,         -- specKey was renamed; field name is now loadoutID
             specKey    = rawMatch.specKey,         -- alias kept for the popup compatibility

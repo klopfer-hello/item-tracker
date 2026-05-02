@@ -179,11 +179,17 @@ local SET_TO_TIER_CLASS = {
     [680] = { tier = "T6", class = "PALADIN" },
 }
 
--- Class -> token group per tier
+-- Class -> token group per tier. Verified against the in-game tooltip
+-- "Classes:" line on the actual tokens; T4/T5 have 3 classes per group:
+--   Champion = Druid, Rogue, Shaman
+--   Hero     = Hunter, Mage, Warlock
+--   Defender = Paladin, Priest, Warrior
+-- (The earlier table had Shaman/Paladin in Hero and Mage in Champion,
+-- which mis-routed Shaman T4 pieces — Cyclone — to Hero tokens.)
 local GROUP_T4_T5 = {
-    DRUID = "Champion", MAGE = "Champion", ROGUE = "Champion",
-    HUNTER = "Hero", PALADIN = "Hero", SHAMAN = "Hero", WARLOCK = "Hero",
-    PRIEST = "Defender", WARRIOR = "Defender",
+    DRUID = "Champion", ROGUE = "Champion", SHAMAN = "Champion",
+    HUNTER = "Hero",    MAGE  = "Hero",     WARLOCK = "Hero",
+    PALADIN = "Defender", PRIEST = "Defender", WARRIOR = "Defender",
 }
 
 local GROUP_T6 = {

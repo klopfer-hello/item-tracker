@@ -727,6 +727,14 @@ local function OwnershipStatus(slotID, itemID, obtainedFlag)
     return nil
 end
 
+--- Public ownership probe used by the notifier (and any future caller) to
+--- ask "does the player already have this goal item, equipped or in the
+--- bag/bank cache?" without going through StatusFor's phase / COVERED
+--- logic. Returns true when EQUIPPED or OWNED, false otherwise.
+function GG:IsItemOwned(slotID, itemID, obtainedFlag)
+    return OwnershipStatus(slotID, itemID, obtainedFlag) ~= nil
+end
+
 --- Returns the display status for a goal entry given the current phase.
 --- Priority:
 ---   1. EQUIPPED / OWNED  — this exact goal item is held
