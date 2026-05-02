@@ -280,8 +280,9 @@ local function BuildFrame()
     -- Footer hint
     frame.footer = inner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     frame.footer:SetPoint("BOTTOM", 0, 12)
-    -- Decimal escape: ↵ U+21B5 (Lua 5.1 doesn't support \xNN hex escapes)
-    frame.footer:SetText(DimText("\226\134\181 Enter · Esc to dismiss"))
+    -- WoW's default font doesn't cover the ↵ glyph (Arrows block); use the
+    -- boxed-key style so the keys read as buttons.
+    frame.footer:SetText(DimText("[Enter] confirm · [Esc] dismiss"))
 
     -- Enter triggers MS roll if visible, else OS, else dismiss
     frame:EnableKeyboard(true)
