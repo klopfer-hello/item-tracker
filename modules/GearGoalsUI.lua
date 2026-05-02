@@ -38,7 +38,7 @@ local P = {
 }
 
 local W              = 760
-local H              = 620
+local H              = 700      -- bumped from 620 to fit the expanded sidebar
 local SIDEBAR_W      = 200
 local TAB_H          = 32
 local PHASE_TAB_H    = 44
@@ -275,6 +275,15 @@ end
 -- Sidebar (slim MVP version)
 -- ============================================================================
 
+-- Sidebar layout helpers — the sidebar is built top-to-bottom by chaining
+-- each block's TOPLEFT to the previous block's BOTTOMLEFT (plus a fixed gap),
+-- so adding a new block doesn't require renumbering every absolute offset
+-- below it. `cursor` always points at the bottommost element of the most
+-- recently added block.
+local SIDEBAR_PAD_X    = 14
+local SIDEBAR_GAP_INTRA = 4    -- gap between label and its value
+local SIDEBAR_GAP_BLOCK = 14   -- gap between blocks
+
 local function BuildSidebar(parent, anchorTo)
     local s = CreatePanel(parent, P.surface)
     s:SetWidth(SIDEBAR_W)
@@ -282,47 +291,114 @@ local function BuildSidebar(parent, anchorTo)
     s:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",   6, 6)
     AddBorder(s, P.border)
 
-    s.phaseLabel = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.phaseLabel:SetPoint("TOPLEFT", 14, -14)
-    s.phaseLabel:SetText("PHASE")
-    s.phaseLabel:SetTextColor(unpack(P.label))
+    -- Anchor helper — always returns the new region so the caller can
+    -- assign it as the next anchor.
+    local function anchorBelow(region, ref, gap)
+        if ref then
+            region:SetPoint("TOPLEFT", ref, "BOTTOMLEFT", 0, -(gap or SIDEBAR_GAP_BLOCK))
+        else
+            region:SetPoint("TOPLEFT", SIDEBAR_PAD_X, -SIDEBAR_GAP_BLOCK)
+        end
+        return region
+    end
 
-    s.phaseValue = s:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    s.phaseValue:SetPoint("TOPLEFT", 14, -28)
-    s.phaseValue:SetTextColor(unpack(P.accent))
+    local function makeLabel(text)
+        local f = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        f:SetText(text)
+        f:SetTextColor(unpack(P.label))
+        return f
+    end
 
-    s.phaseSub = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.phaseSub:SetPoint("TOPLEFT", 14, -50)
-    s.phaseSub:SetTextColor(unpack(P.value))
+    local function makeValue(font, color)
+        local f = s:CreateFontString(nil, "OVERLAY", font or "GameFontNormalLarge")
+        f:SetTextColor(unpack(color or P.accent))
+        return f
+    end
 
-    -- Stats block
-    s.statSlots = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.statSlots:SetPoint("TOPLEFT", 14, -86)
-    s.statSlots:SetTextColor(unpack(P.label))
-    s.statSlotsValue = s:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    s.statSlotsValue:SetPoint("TOPLEFT", 14, -100)
-    s.statSlotsValue:SetTextColor(unpack(P.accent))
+    local cursor   -- updated as each block lands
 
-    s.statTargets = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.statTargets:SetPoint("TOPLEFT", 14, -134)
-    s.statTargets:SetText("TARGETS")
-    s.statTargets:SetTextColor(unpack(P.label))
-    s.statTargetsValue = s:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    s.statTargetsValue:SetPoint("TOPLEFT", 14, -148)
-    s.statTargetsValue:SetTextColor(unpack(P.target))
+    -- ── PHASE ──
+    s.phaseLabel = anchorBelow(makeLabel("PHASE"), nil)
+    s.phaseValue = makeValue("GameFontNormalLarge", P.accent)
+    anchorBelow(s.phaseValue, s.phaseLabel, SIDEBAR_GAP_INTRA)
+    s.phaseSub   = makeValue("GameFontNormalSmall", P.value)
+    anchorBelow(s.phaseSub, s.phaseValue, SIDEBAR_GAP_INTRA)
+    cursor = s.phaseSub
 
-    s.statSlots:SetText("SLOTS WITH PICKS")
+    -- ── BIS TRACKER ── rank-aware completion percentage + progress bar ────
+    -- Per slot with at least one pick: score = 100 - (bestRankOwned - 1) * 20
+    -- (rank 1 = 100, rank 2 = 80, rank 3 = 60, ...). No owned pick → 0.
+    -- Slots without any pick are excluded from the average so an undefined
+    -- slot doesn't drag the score down.
+    s.statSlots      = anchorBelow(makeLabel("BIS TRACKER"), cursor)
+    s.statSlotsValue = makeValue("GameFontNormalLarge", P.accent)
+    anchorBelow(s.statSlotsValue, s.statSlots, SIDEBAR_GAP_INTRA)
 
-    -- Loadout panel — replaces the old class-based spec selector.
-    -- Layout (top to bottom): label, name button (cycles), small action row.
-    s.loadoutLabel = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.loadoutLabel:SetPoint("TOPLEFT", 14, -190)
-    s.loadoutLabel:SetText("LOADOUT")
-    s.loadoutLabel:SetTextColor(unpack(P.label))
+    -- Progress bar — track + fill, fill width is set in Refresh.
+    s.slotsBar = CreateFrame("Frame", nil, s)
+    s.slotsBar:SetHeight(4)
+    s.slotsBar:SetPoint("TOPLEFT",  s.statSlotsValue, "BOTTOMLEFT", 0, -6)
+    s.slotsBar:SetPoint("RIGHT", s, "RIGHT", -SIDEBAR_PAD_X, 0)
+    AddBackground(s.slotsBar, P.surfaceAlt)
+    s.slotsBarFill = s.slotsBar:CreateTexture(nil, "ARTWORK")
+    s.slotsBarFill:SetPoint("TOPLEFT")
+    s.slotsBarFill:SetPoint("BOTTOMLEFT")
+    s.slotsBarFill:SetWidth(0)
+    SetColor(s.slotsBarFill, P.accent)
+    cursor = s.slotsBar
+
+    -- ── AVG ILVL ──
+    s.statIlvl      = anchorBelow(makeLabel("AVG ILVL"), cursor)
+    s.statIlvlValue = makeValue("GameFontNormalLarge", P.accent)
+    anchorBelow(s.statIlvlValue, s.statIlvl, SIDEBAR_GAP_INTRA)
+    cursor = s.statIlvlValue
+
+    -- ── TARGETS ──
+    s.statTargets      = anchorBelow(makeLabel("TARGETS"), cursor)
+    s.statTargetsValue = makeValue("GameFontNormalLarge", P.target)
+    anchorBelow(s.statTargetsValue, s.statTargets, SIDEBAR_GAP_INTRA)
+    cursor = s.statTargetsValue
+
+    -- ── STATUS BREAKDOWN ── three rows: dot + label + count ───────────────
+    s.breakdownLabel = anchorBelow(makeLabel("STATUS BREAKDOWN"), cursor)
+    cursor = s.breakdownLabel
+
+    local function makeBreakdownRow(text, dotColor)
+        local row = CreateFrame("Frame", nil, s)
+        row:SetHeight(14)
+        row:SetPoint("LEFT",  s, "LEFT",  SIDEBAR_PAD_X, 0)
+        row:SetPoint("RIGHT", s, "RIGHT", -SIDEBAR_PAD_X, 0)
+
+        row.dot = row:CreateTexture(nil, "ARTWORK")
+        row.dot:SetSize(6, 6)
+        row.dot:SetPoint("LEFT", 0, 0)
+        SetColor(row.dot, dotColor)
+
+        row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.label:SetPoint("LEFT", row.dot, "RIGHT", 8, 0)
+        row.label:SetText(text)
+        row.label:SetTextColor(unpack(P.value))
+
+        row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row.count:SetPoint("RIGHT")
+        row.count:SetTextColor(unpack(P.value))
+        return row
+    end
+
+    s.breakdownOwned    = makeBreakdownRow("Owned",                P.success)
+    s.breakdownTargeted = makeBreakdownRow("Targeted",             P.target)
+    s.breakdownLocked   = makeBreakdownRow("Locked (future phase)", P.locked)
+    anchorBelow(s.breakdownOwned,    cursor,                SIDEBAR_GAP_INTRA + 2)
+    anchorBelow(s.breakdownTargeted, s.breakdownOwned,      SIDEBAR_GAP_INTRA)
+    anchorBelow(s.breakdownLocked,   s.breakdownTargeted,   SIDEBAR_GAP_INTRA)
+    cursor = s.breakdownLocked
+
+    -- ── LOADOUT ── (panel: name button + rename / set-main / add-second) ──
+    s.loadoutLabel = anchorBelow(makeLabel("LOADOUT"), cursor)
 
     s.loadoutBtn = CreateFrame("Button", nil, s)
-    s.loadoutBtn:SetPoint("TOPLEFT", 14, -208)
     s.loadoutBtn:SetSize(SIDEBAR_W - 28, 26)
+    anchorBelow(s.loadoutBtn, s.loadoutLabel, SIDEBAR_GAP_INTRA)
     s.loadoutBtn.bg = AddBackground(s.loadoutBtn, P.surfaceAlt)
     AddBorder(s.loadoutBtn, P.border)
     s.loadoutBtn.text = s.loadoutBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -332,9 +408,6 @@ local function BuildSidebar(parent, anchorTo)
     s.loadoutBtn:SetScript("OnLeave", function(self) SetColor(self.bg, P.surfaceAlt) end)
     s.loadoutBtn:SetScript("OnClick", function() UI:CycleLoadout() end)
 
-    -- Action row: rename / set-main / add-second.
-    -- These three buttons share the same y position and toggle visibility
-    -- in Refresh based on loadout count + main flag.
     local function MakeAction(label, onClick)
         local b = CreateFrame("Button", nil, s)
         b:SetSize((SIDEBAR_W - 28 - 4) / 2, 22)
@@ -349,8 +422,8 @@ local function BuildSidebar(parent, anchorTo)
         b:SetScript("OnClick", onClick)
         return b
     end
-    s.renameBtn  = MakeAction("Rename",  function() UI:OpenRenameLoadoutDialog() end)
-    s.renameBtn:SetPoint("TOPLEFT", 14, -240)
+    s.renameBtn = MakeAction("Rename", function() UI:OpenRenameLoadoutDialog() end)
+    anchorBelow(s.renameBtn, s.loadoutBtn, SIDEBAR_GAP_INTRA)
 
     s.setMainBtn = MakeAction("Set main", function()
         IT.GearGoals:SetMainLoadout(viewLoadoutID)
@@ -361,22 +434,18 @@ local function BuildSidebar(parent, anchorTo)
     s.addLoadoutBtn = MakeAction("+ Add second loadout", function()
         UI:OpenRenameLoadoutDialog(true)   -- true = add mode
     end)
-    s.addLoadoutBtn:SetPoint("TOPLEFT", 14, -240)
+    s.addLoadoutBtn:SetPoint("TOPLEFT", s.renameBtn, "TOPLEFT", 0, 0)
     s.addLoadoutBtn:SetWidth(SIDEBAR_W - 28)
+    cursor = s.renameBtn  -- same y row as setMainBtn / addLoadoutBtn
 
-    -- "Set as current phase" toggle (acts on the currently viewed phase)
-    s.currentPhaseLabel = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.currentPhaseLabel:SetPoint("TOPLEFT", 14, -278)
-    s.currentPhaseLabel:SetText("CURRENT PHASE")
-    s.currentPhaseLabel:SetTextColor(unpack(P.label))
-
-    s.currentPhaseValue = s:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s.currentPhaseValue:SetPoint("TOPLEFT", 14, -294)
-    s.currentPhaseValue:SetTextColor(unpack(P.accent))
+    -- ── CURRENT PHASE ── (label + value + "set as current" button) ────────
+    s.currentPhaseLabel = anchorBelow(makeLabel("CURRENT PHASE"), cursor)
+    s.currentPhaseValue = makeValue("GameFontNormal", P.accent)
+    anchorBelow(s.currentPhaseValue, s.currentPhaseLabel, SIDEBAR_GAP_INTRA)
 
     s.setCurrentBtn = CreateFrame("Button", nil, s)
-    s.setCurrentBtn:SetPoint("TOPLEFT", 14, -318)
     s.setCurrentBtn:SetSize(SIDEBAR_W - 28, 26)
+    anchorBelow(s.setCurrentBtn, s.currentPhaseValue, SIDEBAR_GAP_INTRA)
     s.setCurrentBtn.bg = AddBackground(s.setCurrentBtn, P.surfaceAlt)
     AddBorder(s.setCurrentBtn, P.borderGold)
     s.setCurrentBtn.text = s.setCurrentBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -390,17 +459,14 @@ local function BuildSidebar(parent, anchorTo)
         IT:Print("Current phase set to " .. (IT.GearGoals.PHASE_LABEL[viewed] or viewed), IT.Colors.success)
         UI:Refresh()
     end)
+    cursor = s.setCurrentBtn
 
-    -- PHASE ACTIONS group — Copy from <Previous>. Hidden when viewing
-    -- pre-raid (no previous phase exists).
-    s.phaseActionsLabel = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    s.phaseActionsLabel:SetPoint("TOPLEFT", 14, -354)
-    s.phaseActionsLabel:SetText("PHASE ACTIONS")
-    s.phaseActionsLabel:SetTextColor(unpack(P.label))
+    -- ── PHASE ACTIONS ── ("Copy from <previous phase>") ─────────────────
+    s.phaseActionsLabel = anchorBelow(makeLabel("PHASE ACTIONS"), cursor)
 
     s.copyPhaseBtn = CreateFrame("Button", nil, s)
-    s.copyPhaseBtn:SetPoint("TOPLEFT", 14, -370)
     s.copyPhaseBtn:SetSize(SIDEBAR_W - 28, 26)
+    anchorBelow(s.copyPhaseBtn, s.phaseActionsLabel, SIDEBAR_GAP_INTRA)
     s.copyPhaseBtn.bg = AddBackground(s.copyPhaseBtn, P.surfaceAlt)
     AddBorder(s.copyPhaseBtn, P.borderGold)
     s.copyPhaseBtn.text = s.copyPhaseBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1015,17 +1081,92 @@ function UI:Refresh()
         sidebar.copyPhaseBtn:Hide()
     end
 
-    local slotsWithPicks, totalTargets = 0, 0
+    -- BiS tracker score (per viewed phase) + targets count.
+    --   Per slot with at least one pick:
+    --       bestRankOwned = lowest rank with status EQUIPPED/OWNED/COVERED
+    --       slotScore     = max(0, 100 - (bestRankOwned - 1) * 20)
+    --       (no owned pick → 0)
+    --   Final score = average across slots that have picks defined.
+    -- Goals iterate in array order; NormalizeRanks keeps array index ==
+    -- goal.rank, so the first goal we hit with an owned status is the best.
+    local PER_RANK_PENALTY = 20
+    local bisScoreSum, bisSlotCount, totalTargets = 0, 0, 0
     for _, slotID in ipairs(GG.SLOT_ORDER) do
         local goals = GG:GetGoals(spec, phase, slotID)
-        if #goals > 0 then slotsWithPicks = slotsWithPicks + 1 end
-        for _, g in ipairs(goals) do
-            local status = GG:StatusFor(spec, phase, slotID, g)
-            if status == "TARGET" then totalTargets = totalTargets + 1 end
+        if #goals > 0 then
+            bisSlotCount = bisSlotCount + 1
+            local bestRank
+            for _, g in ipairs(goals) do
+                local status = GG:StatusFor(spec, phase, slotID, g)
+                if status == GG.STATUS.TARGET then
+                    totalTargets = totalTargets + 1
+                end
+                if not bestRank
+                   and (status == GG.STATUS.EQUIPPED
+                        or status == GG.STATUS.OWNED
+                        or status == GG.STATUS.COVERED) then
+                    bestRank = g.rank
+                end
+            end
+            if bestRank then
+                bisScoreSum = bisScoreSum
+                    + math.max(0, 100 - (bestRank - 1) * PER_RANK_PENALTY)
+            end
+            -- else: slot contributes 0
         end
     end
-    sidebar.statSlotsValue:SetText(slotsWithPicks .. " / " .. #GG.SLOT_ORDER)
+    local bisPct = (bisSlotCount > 0)
+        and math.floor(bisScoreSum / bisSlotCount + 0.5) or 0
+    sidebar.statSlotsValue:SetText(bisPct .. "%")
     sidebar.statTargetsValue:SetText(tostring(totalTargets))
+
+    -- BiS progress bar — fills proportional to bisPct.
+    local trackW = sidebar.slotsBar:GetWidth() or 0
+    if trackW > 0 then
+        sidebar.slotsBarFill:SetWidth(math.max(0, trackW * (bisPct / 100)))
+    end
+
+    -- Avg ilvl: average of currently-equipped tracked slots, character-wide.
+    -- Independent of the viewed loadout/phase — it's "what am I wearing".
+    local ilvlSum, ilvlCount = 0, 0
+    for _, slotID in ipairs(GG.SLOT_ORDER) do
+        local eq = GG:GetEquipped(slotID)
+        if eq and eq.ilvl and eq.ilvl > 0 then
+            ilvlSum   = ilvlSum   + eq.ilvl
+            ilvlCount = ilvlCount + 1
+        end
+    end
+    if ilvlCount > 0 then
+        sidebar.statIlvlValue:SetText(tostring(math.floor(ilvlSum / ilvlCount + 0.5)))
+    else
+        sidebar.statIlvlValue:SetText("-")
+    end
+
+    -- Status breakdown — across *every* phase of the viewed loadout. Gives
+    -- a holistic view of progress that the per-phase TARGETS pill can't.
+    local owned, targeted, locked = 0, 0, 0
+    local loadoutGoals = IT.charDB.goals and IT.charDB.goals[spec]
+    if loadoutGoals then
+        for ph, bySlot in pairs(loadoutGoals) do
+            for slotID, list in pairs(bySlot) do
+                for _, g in ipairs(list) do
+                    local status = GG:StatusFor(spec, ph, slotID, g)
+                    if status == GG.STATUS.TARGET then
+                        targeted = targeted + 1
+                    elseif status == GG.STATUS.LOCKED then
+                        locked = locked + 1
+                    elseif status == GG.STATUS.EQUIPPED
+                        or status == GG.STATUS.OWNED
+                        or status == GG.STATUS.COVERED then
+                        owned = owned + 1
+                    end
+                end
+            end
+        end
+    end
+    sidebar.breakdownOwned.count:SetText(tostring(owned))
+    sidebar.breakdownTargeted.count:SetText(tostring(targeted))
+    sidebar.breakdownLocked.count:SetText(tostring(locked))
 
     -- Loadout panel — show the viewing loadout's name with a gold "(main)"
     -- marker when it's the main loadout. Action-row visibility:
