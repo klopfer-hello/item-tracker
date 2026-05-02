@@ -21,21 +21,9 @@ IT.GearGoalsUI = UI
 -- self-contained)
 -- ============================================================================
 
-local P = {
-    bg          = { 0.04, 0.04, 0.06, 1.00 },     -- main backdrop (opaque)
-    surface     = { 0.08, 0.08, 0.11, 1.00 },     -- panels
-    surfaceAlt  = { 0.12, 0.12, 0.15, 1.00 },     -- alt rows / pills
-    border      = { 0.22, 0.22, 0.27, 0.95 },
-    borderGold  = { 0.62, 0.48, 0.20, 0.95 },
-    accent      = { 1.00, 0.78, 0.20 },           -- gold
-    accentDim   = { 0.55, 0.43, 0.18 },
-    label       = { 0.68, 0.68, 0.72 },           -- muted but legible
-    value       = { 0.95, 0.95, 0.97 },           -- near-white
-    success     = { 0.40, 0.85, 0.50 },           -- OWNED
-    target      = { 0.95, 0.45, 0.55 },           -- TARGET
-    equipped    = { 1.00, 0.70, 0.25 },           -- EQUIPPED
-    locked      = { 0.60, 0.32, 0.32 },           -- LOCKED (future phase)
-}
+-- Shared dark/gold palette (see modules/Theme.lua). Kept as a file-local
+-- alias so existing call sites keep using the short `P.accent` form.
+local P = IT.Theme.P
 
 local W              = 760
 local H              = 700      -- bumped from 620 to fit the expanded sidebar
@@ -86,33 +74,10 @@ local RaidBucketFor              -- forward-declared so Refresh's tab-count
 -- Helpers
 -- ============================================================================
 
-local function SetColor(tex, c) tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
-
-local function AddBackground(parent, color)
-    local bg = parent:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    SetColor(bg, color)
-    return bg
-end
-
-local function AddBorder(parent, c, thickness)
-    thickness = thickness or 1
-    local edges = {}
-    for _, p in ipairs({
-        { "TOPLEFT",    "TOPRIGHT",    nil, thickness },
-        { "BOTTOMLEFT", "BOTTOMRIGHT", nil, thickness },
-        { "TOPLEFT",    "BOTTOMLEFT",  thickness, nil },
-        { "TOPRIGHT",   "BOTTOMRIGHT", thickness, nil },
-    }) do
-        local t = parent:CreateTexture(nil, "OVERLAY")
-        t:SetPoint(p[1]); t:SetPoint(p[2])
-        if p[3] then t:SetWidth(p[3])  end
-        if p[4] then t:SetHeight(p[4]) end
-        SetColor(t, c)
-        table.insert(edges, t)
-    end
-    return edges
-end
+-- Shared frame helpers — see modules/Theme.lua.
+local SetColor      = IT.Theme.SetColor
+local AddBackground = IT.Theme.AddBackground
+local AddBorder     = IT.Theme.AddBorder
 
 local function CreatePanel(parent, color)
     local f = CreateFrame("Frame", nil, parent)

@@ -31,11 +31,11 @@ IT.UI = UI
 local BAR_WIDTH  = 280
 local BAR_HEIGHT = 22
 
--- Glassy palette (still used by the anchor bar tooltip; full restyling
--- to the dark/gold GearGoals palette is brief 14's job).
-local CD = {
-    accent = { 0.28, 0.74, 0.97 },
-}
+-- Shared dark/gold palette (see modules/Theme.lua).
+local P = IT.Theme.P
+local SetColor      = IT.Theme.SetColor
+local AddBackground = IT.Theme.AddBackground
+local AddBorder     = IT.Theme.AddBorder
 
 -- ============================================================================
 -- Frames
@@ -50,16 +50,20 @@ local barFrame   -- the anchor frame that toasts position relative to
 local function ShowBar()
     if not barFrame then return end
     barFrame:EnableMouse(true)
-    barFrame:SetBackdropColor(0.10, 0.10, 0.16, 0.78)
-    barFrame:SetBackdropBorderColor(0.30, 0.75, 0.98, 0.35)
+    SetColor(barFrame.bg,     P.surface)
+    for _, edge in ipairs(barFrame.edges) do
+        SetColor(edge, P.borderGold)
+    end
     barFrame.title:SetText("|cFFFFCC33Klopfer's Item Tracker|r")
     barFrame.grip:SetText("|cFF666666::::|r")
 end
 
 local function HideBar()
     if not barFrame then return end
-    barFrame:SetBackdropColor(0, 0, 0, 0)
-    barFrame:SetBackdropBorderColor(0, 0, 0, 0)
+    SetColor(barFrame.bg, { 0, 0, 0, 0 })
+    for _, edge in ipairs(barFrame.edges) do
+        SetColor(edge, { 0, 0, 0, 0 })
+    end
     barFrame.title:SetText("")
     barFrame.grip:SetText("")
     -- Keep EnableMouse(true) so OnEnter still fires for hover reveal
@@ -79,17 +83,17 @@ end
 -- ============================================================================
 
 local function CreateAnchorBar()
-    local f = CreateFrame("Frame", "ItemTrackerBar", UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "ItemTrackerBar", UIParent)
     f:SetSize(BAR_WIDTH, BAR_HEIGHT)
     f:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 200)
     f:SetFrameStrata("MEDIUM")
     f:SetFrameLevel(50)
 
-    f:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
+    -- Manual background + border (no BackdropTemplate). Stored on the
+    -- frame so ShowBar / HideBar can recolour them as the lock state
+    -- toggles between visible (gold border) and fully transparent.
+    f.bg    = AddBackground(f, P.surface)
+    f.edges = AddBorder(f, P.borderGold)
 
     -- Title
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -127,7 +131,7 @@ local function CreateAnchorBar()
             ShowBar()
         end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Klopfer's Item Tracker", CD.accent[1], CD.accent[2], CD.accent[3])
+        GameTooltip:AddLine("Klopfer's Item Tracker", P.accent[1], P.accent[2], P.accent[3])
         GameTooltip:AddLine("Left-click: Loot log", 0.7, 0.7, 0.7)
         if not IT.db.settings.locked then
             GameTooltip:AddLine("Drag: Move", 0.7, 0.7, 0.7)

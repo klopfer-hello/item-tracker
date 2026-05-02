@@ -23,6 +23,9 @@
 # Core (must load first — framework, event bus, utilities)
 Core.lua
 
+# Theme (palette + frame helpers; depends only on Core, must load before any UI)
+modules\Theme.lua
+
 # Data & Detection (no UI dependencies)
 modules\LootDetector.lua
 modules\GoldTracker.lua

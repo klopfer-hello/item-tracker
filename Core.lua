@@ -67,9 +67,10 @@ IT.QUALITY_COLORS = {
     [5] = { r = 1.00, g = 0.50, b = 0.00 },  -- Legendary (orange)
 }
 
--- Color codes for chat messages
+-- Color codes for chat messages. `addon` is the brand gold used for
+-- chat output; matches the dark/gold UI palette in modules/Theme.lua.
 IT.Colors = {
-    addon     = "|cFF00D1FF",
+    addon     = "|cFFFFCC33",
     success   = "|cFF00FF00",
     warning   = "|cFFFFFF00",
     error     = "|cFFFF0000",

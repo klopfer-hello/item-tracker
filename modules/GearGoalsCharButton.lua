@@ -16,38 +16,16 @@ IT.GearGoalsCharButton = CB
 
 local BUTTON_SIZE = 22
 
--- Match the GearGoals palette so the button reads as part of the same suite
-local P = {
-    bg     = { 0.10, 0.10, 0.13, 1.0 },
-    bgHi   = { 0.18, 0.14, 0.05, 1.0 },
-    border = { 0.62, 0.48, 0.20, 0.95 },
-    accent = { 1.00, 0.78, 0.20 },
-    label  = { 0.68, 0.68, 0.72 },
-}
+-- Shared palette + helpers (see modules/Theme.lua). The button uses the
+-- gold-bordered look; bg/bgHi map to surface/bgHi, border to borderGold.
+local P = setmetatable({
+    bg     = IT.Theme.P.surface,
+    border = IT.Theme.P.borderGold,
+}, { __index = IT.Theme.P })
 
-local function SetColor(tex, c) tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
-
-local function AddBackground(parent, color)
-    local bg = parent:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    SetColor(bg, color)
-    return bg
-end
-
-local function AddBorder(parent, c)
-    for _, p in ipairs({
-        { "TOPLEFT",    "TOPRIGHT",    nil, 1 },
-        { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
-        { "TOPLEFT",    "BOTTOMLEFT",  1,   nil },
-        { "TOPRIGHT",   "BOTTOMRIGHT", 1,   nil },
-    }) do
-        local t = parent:CreateTexture(nil, "OVERLAY")
-        t:SetPoint(p[1]); t:SetPoint(p[2])
-        if p[3] then t:SetWidth(p[3])  end
-        if p[4] then t:SetHeight(p[4]) end
-        SetColor(t, c)
-    end
-end
+local SetColor      = IT.Theme.SetColor
+local AddBackground = IT.Theme.AddBackground
+local AddBorder     = IT.Theme.AddBorder
 
 local button
 

@@ -34,9 +34,13 @@ local FADE_IN_DURATION  = 0.25
 local FADE_OUT_DURATION = 0.5
 local SLIDE_DURATION    = 0.2
 
--- Glassy palette (lightened)
-local BG_COLOR    = { 0.10, 0.10, 0.16, 0.78 }
-local BORDER_COLOR = { 0.30, 0.75, 0.98, 0.35 }
+-- Shared dark/gold palette (see modules/Theme.lua). Toasts use surface
+-- as the fill and the muted border colour; quality-tinted item names
+-- and the gold accent on roll status text carry the visual hierarchy.
+local P = IT.Theme.P
+local SetColor      = IT.Theme.SetColor
+local AddBackground = IT.Theme.AddBackground
+local AddBorder     = IT.Theme.AddBorder
 
 -- ============================================================================
 -- Toast Pool & State
@@ -59,30 +63,27 @@ end
 -- ============================================================================
 
 local function CreateToastFrame()
-    local f = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", nil, UIParent)
     f:SetSize(TOAST_WIDTH, TOAST_BASE_HEIGHT)
     f:SetFrameStrata("DIALOG")
     f:SetFrameLevel(100)
 
-    f:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    f:SetBackdropColor(unpack(BG_COLOR))
-    f:SetBackdropBorderColor(unpack(BORDER_COLOR))
+    AddBackground(f, P.surface)
+    AddBorder(f, P.border)
 
-    -- Item icon
-    f.icon = f:CreateTexture(nil, "ARTWORK")
-    f.icon:SetSize(TOAST_ICON_SIZE, TOAST_ICON_SIZE)
-    f.icon:SetPoint("LEFT", f, "LEFT", TOAST_PADDING, 0)
+    -- Icon holder frame so we can hang a 4-edge border around the icon
+    -- without it sitting *on top* of the texture. The old single-rect
+    -- overlay covered the whole icon with whatever color it was filled
+    -- with — solid gold made every icon look like a blank gold square.
+    f.iconHolder = CreateFrame("Frame", nil, f)
+    f.iconHolder:SetSize(TOAST_ICON_SIZE, TOAST_ICON_SIZE)
+    f.iconHolder:SetPoint("LEFT", f, "LEFT", TOAST_PADDING, 0)
+    AddBorder(f.iconHolder, P.borderGold)
+
+    f.icon = f.iconHolder:CreateTexture(nil, "ARTWORK")
+    f.icon:SetPoint("TOPLEFT",     1, -1)
+    f.icon:SetPoint("BOTTOMRIGHT", -1, 1)
     f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-
-    -- Thin neutral border around icon
-    f.iconBorder = f:CreateTexture(nil, "OVERLAY")
-    f.iconBorder:SetSize(TOAST_ICON_SIZE + 2, TOAST_ICON_SIZE + 2)
-    f.iconBorder:SetPoint("CENTER", f.icon, "CENTER")
-    f.iconBorder:SetColorTexture(0.30, 0.30, 0.35, 0.5)
 
     -- Item name
     f.itemName = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -96,7 +97,7 @@ local function CreateToastFrame()
     f.subText:SetPoint("TOPLEFT", f.itemName, "BOTTOMLEFT", 0, -2)
     f.subText:SetPoint("RIGHT", f, "RIGHT", -TOAST_PADDING, 0)
     f.subText:SetJustifyH("LEFT")
-    f.subText:SetTextColor(0.70, 0.70, 0.75, 1)
+    f.subText:SetTextColor(P.label[1], P.label[2], P.label[3], 1)
 
     -- Roll container (font strings added dynamically)
     f.rollLines = {}
@@ -238,12 +239,12 @@ local ROLL_TYPE_ICONS = {
     greed      = "|cFFFFCC00Greed|r",
     disenchant = "|cFF9D4DFFDisenchant|r",
     pass       = "|cFF888888Pass|r",
-    council    = "|cFF00D1FFCouncil|r",
+    council    = "|cFFFFCC33Council|r",
     reserve    = "|cFF44FF44Reserve|r",
 }
 
 local SOURCE_LABELS = {
-    RCLootCouncil = "|cFF00D1FFLoot Council|r",
+    RCLootCouncil = "|cFFFFCC33Loot Council|r",
     LootReserve   = "|cFF44FF44Soft Reserve|r",
 }
 
@@ -251,7 +252,7 @@ local function EnsureRollLine(toast, index)
     if not toast.rollLines[index] then
         local line = toast:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         line:SetJustifyH("LEFT")
-        line:SetTextColor(0.78, 0.78, 0.82, 1)
+        line:SetTextColor(P.value[1], P.value[2], P.value[3], 1)
         toast.rollLines[index] = line
     end
     return toast.rollLines[index]
@@ -288,16 +289,11 @@ local function UpdateRollDisplay(toast, rolls)
         toast.rollLines[i]:Hide()
     end
 
-    -- Show roll panel backdrop
+    -- Show roll panel backdrop (matches the toast's surface + border).
     if not toast.rollPanel then
-        toast.rollPanel = CreateFrame("Frame", nil, toast, "BackdropTemplate")
-        toast.rollPanel:SetBackdrop({
-            bgFile   = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8",
-            edgeSize = 1,
-        })
-        toast.rollPanel:SetBackdropColor(unpack(BG_COLOR))
-        toast.rollPanel:SetBackdropBorderColor(unpack(BORDER_COLOR))
+        toast.rollPanel = CreateFrame("Frame", nil, toast)
+        AddBackground(toast.rollPanel, P.surface)
+        AddBorder(toast.rollPanel, P.border)
         toast.rollPanel:SetFrameLevel(toast:GetFrameLevel() - 1)
     end
     local panelH = visible * TOAST_ROLL_ROW_H + 8

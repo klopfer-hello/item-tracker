@@ -19,21 +19,18 @@ local Alert = {}
 IT.GearGoalsAlert = Alert
 
 -- ============================================================================
--- Design palette (GearGoals — dark/gold/purple per user's design)
+-- Design palette
+-- Shared dark/gold values come from Theme.P. Keep file-local entries for
+-- the popup-specific extras (purple highlight, button background) so we
+-- don't pollute the global palette with one-off hover colours.
 -- ============================================================================
 
-local P = {
-    bg          = { 0.04, 0.04, 0.06, 0.97 },
-    surface     = { 0.07, 0.07, 0.10, 1.00 },
-    border      = { 0.55, 0.43, 0.18, 0.80 },   -- gold border
-    borderDim   = { 0.18, 0.18, 0.23, 0.80 },
-    accent      = { 1.00, 0.78, 0.20 },         -- gold (primary)
-    accentDim   = { 0.55, 0.43, 0.18 },
-    label       = { 0.45, 0.45, 0.52 },
-    value       = { 0.85, 0.85, 0.90 },
-    purple      = { 0.64, 0.21, 0.93 },
-    btnBg       = { 0.10, 0.10, 0.14, 1.0 },
-}
+local P = setmetatable({
+    borderDim = IT.Theme.P.border,        -- dim grey edge under the gold border
+    border    = IT.Theme.P.borderGold,    -- the popup's signature gold frame
+    purple    = { 0.64, 0.21, 0.93 },     -- "off spec" accent in the spec callout
+    btnBg     = IT.Theme.P.surfaceAlt,    -- action-button fill
+}, { __index = IT.Theme.P })
 
 local POPUP_WIDTH  = 460
 local POPUP_HEIGHT = 360
@@ -49,26 +46,8 @@ local currentDrop  -- last GEAR_GOAL_DROPPED payload
 -- Helpers
 -- ============================================================================
 
-local function SetColor(tex, c) tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
-
-local function AddBorder(parent, c, thickness)
-    thickness = thickness or 1
-    local edges = {}
-    for _, p in ipairs({
-        { "TOPLEFT",    "TOPRIGHT",    nil, thickness },
-        { "BOTTOMLEFT", "BOTTOMRIGHT", nil, thickness },
-        { "TOPLEFT",    "BOTTOMLEFT",  thickness, nil },
-        { "TOPRIGHT",   "BOTTOMRIGHT", thickness, nil },
-    }) do
-        local t = parent:CreateTexture(nil, "OVERLAY")
-        t:SetPoint(p[1]); t:SetPoint(p[2])
-        if p[3] then t:SetWidth(p[3])  end
-        if p[4] then t:SetHeight(p[4]) end
-        SetColor(t, c)
-        table.insert(edges, t)
-    end
-    return edges
-end
+local SetColor  = IT.Theme.SetColor
+local AddBorder = IT.Theme.AddBorder
 
 local function AddCornerBracket(parent, corner, c, length)
     length = length or 12
