@@ -343,6 +343,45 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         if IT.UI and IT.UI.Toggle then
             IT.UI:Toggle()
         end
+    elseif msg == "gear" or msg == "goals" or msg == "bis" then
+        if IT.GearGoalsUI and IT.GearGoalsUI.Toggle then
+            IT.GearGoalsUI:Toggle()
+        end
+    elseif msg:match("^phase ") then
+        local p = msg:match("^phase%s+(.+)$")
+        if IT.GearGoals and p then
+            local valid = false
+            for _, ph in ipairs(IT.GearGoals.PHASES) do if ph == p then valid = true; break end end
+            if valid then
+                IT.GearGoals:SetCurrentPhase(p)
+                IT:Print("Current phase set to " .. p, IT.Colors.success)
+            else
+                IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "), IT.Colors.warning)
+            end
+        end
+    elseif msg:match("^gear%s+copy") or msg:match("^copy%s+") then
+        local from, to = msg:match("^gear%s+copy%s+(%S+)%s+(%S+)$")
+        if not from then from, to = msg:match("^copy%s+(%S+)%s+(%S+)$") end
+        if not (from and to) then
+            IT:Print("Usage: /it gear copy <fromPhase> <toPhase>", IT.Colors.warning)
+        else
+            local function isValid(p)
+                for _, ph in ipairs(IT.GearGoals.PHASES) do if ph == p then return true end end
+                return false
+            end
+            if not isValid(from) or not isValid(to) then
+                IT:Print("Unknown phase. Use one of: " .. table.concat(IT.GearGoals.PHASES, ", "),
+                    IT.Colors.warning)
+            else
+                local loadout = IT.GearGoals:GetMainLoadoutID()
+                local ok, err = IT.GearGoals:CopyPhase(loadout, from, to)
+                if ok then
+                    IT:Print("Copied " .. from .. " into " .. to .. " on main loadout.", IT.Colors.success)
+                else
+                    IT:Print("Copy failed: " .. (err or "?"), IT.Colors.error)
+                end
+            end
+        end
     elseif msg == "clear" then
         if IT.LootHistory then
             IT.LootHistory:Clear()
@@ -366,6 +405,10 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:FireTestLC()
     elseif msg == "test reserve" then
         IT:FireTestReserve()
+    elseif msg == "test gear" then
+        IT:FireTestGearGoal()
+    elseif msg == "test token" then
+        IT:FireTestGearGoalToken()
     elseif msg == "status" then
         IT:Print("Addon: " .. (IT.db.settings.enabled and "ON" or "OFF"), IT.Colors.info)
         IT:Print("RCLootCouncil: " .. (IT.RCLCIntegration and IT.RCLCIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
@@ -383,12 +426,17 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("Commands:", IT.Colors.highlight)
         IT:Print("  /it config    - Open settings", IT.Colors.info)
         IT:Print("  /it history   - Toggle history panel", IT.Colors.info)
+        IT:Print("  /it gear      - Toggle gear goals window", IT.Colors.info)
+        IT:Print("  /it phase X   - Set current phase (pre-raid, 1, 2, 3, 3.5, 4)", IT.Colors.info)
+        IT:Print("  /it gear copy <from> <to> - Copy a phase's picks (main loadout)", IT.Colors.info)
         IT:Print("  /it clear     - Clear loot history", IT.Colors.info)
         IT:Print("  /it status    - Show integration status", IT.Colors.info)
         IT:Print("  /it test      - Simulate a loot drop", IT.Colors.info)
         IT:Print("  /it test roll - Simulate a group roll", IT.Colors.info)
         IT:Print("  /it test lc   - Simulate a loot council session", IT.Colors.info)
         IT:Print("  /it test reserve - Simulate a LootReserve roll", IT.Colors.info)
+        IT:Print("  /it test gear - Simulate a gear-goal drop popup", IT.Colors.info)
+        IT:Print("  /it test token - Simulate a token drop with redemption", IT.Colors.info)
         IT:Print("  /it debug     - Toggle debug mode", IT.Colors.info)
         IT:Print("  /it version   - Show version", IT.Colors.info)
     end
@@ -638,4 +686,53 @@ function IT:FireTestGold()
         local total = IT.LootDetector:GetSessionGold()
         IT:Print("Test gold: +" .. FormatCopper(copper) .. "  (session: " .. FormatCopper(total) .. ")", IT.Colors.highlight)
     end
+end
+
+-- Synthetic GEAR_GOAL_DROPPED so the popup can be smoke-tested without
+-- needing real goals + a real drop. Bypasses dedup and rank suppression.
+function IT:FireTestGearGoal()
+    local item = TEST_ITEMS[(testCounter % #TEST_ITEMS) + 1]
+    testCounter = testCounter + 1
+    local fakeLink = "|cFF" .. string.format("%02X%02X%02X",
+        IT.QUALITY_COLORS[item.quality].r * 255,
+        IT.QUALITY_COLORS[item.quality].g * 255,
+        IT.QUALITY_COLORS[item.quality].b * 255)
+        .. "|Hitem:" .. item.id .. "::::::::70:::::|h[" .. item.name .. "]|h|r"
+
+    IT:Print("Test gear-goal drop: " .. fakeLink, IT.Colors.info)
+    IT.Events:Fire("GEAR_GOAL_DROPPED", {
+        itemID   = item.id,
+        itemLink = fakeLink,
+        slotID   = INVSLOT_NECK,   -- arbitrary for the test
+        looter   = TEST_PLAYERS[(testCounter % #TEST_PLAYERS) + 1],
+        fromChat = false,
+        matches  = {
+            { specKey = "TEST-Main",     phase = "3", slotID = INVSLOT_NECK, rank = 1, isMainSpec = true  },
+            { specKey = "TEST-Off",      phase = "3", slotID = INVSLOT_NECK, rank = 2, isMainSpec = false },
+        },
+    })
+end
+
+--- Synthetic token drop: simulates Helm of the Fallen Hero dropping for a
+--- Shaman who has *both* a Resto goal (Cyclone Helm, main spec) and an Ele
+--- goal (Cataclysm Headpiece, off spec). The popup therefore shows both
+--- ROLL 100 (MS) and ROLL 99 (OS) buttons, matching the cross-spec scenario.
+function IT:FireTestGearGoalToken()
+    local tokenID = 29761   -- Helm of the Fallen Hero
+    local fakeLink = "|cFFA335EE|Hitem:" .. tokenID .. "::::::::70:::::|h[Helm of the Fallen Hero]|h|r"
+
+    IT:Print("Test token drop: " .. fakeLink, IT.Colors.info)
+    IT.Events:Fire("GEAR_GOAL_DROPPED", {
+        itemID   = tokenID,
+        itemLink = fakeLink,
+        slotID   = INVSLOT_HEAD,
+        looter   = "Mograine",
+        fromChat = false,
+        matches  = {
+            { specKey = "SHAMAN-Restoration", phase = "1", slotID = INVSLOT_HEAD,
+              rank = 1, isMainSpec = true,  isToken = true, goalItemID = 29028 }, -- Cyclone Helm
+            { specKey = "SHAMAN-Elemental",   phase = "1", slotID = INVSLOT_HEAD,
+              rank = 1, isMainSpec = false, isToken = true, goalItemID = 28963 }, -- Cataclysm Headpiece
+        },
+    })
 end

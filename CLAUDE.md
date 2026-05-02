@@ -188,6 +188,136 @@ All integrations are safe — they do nothing if the external addon is not insta
 - Locale-safe message parsing via `IT:FormatToPattern(globalString)` helper
 - UI controls use `AddThinBorder()` helper and custom-drawn tracks (no BackdropTemplate on sliders)
 
+## Planned: GearGoals Module
+
+A character-scoped, spec-aware, phase-organised BiS / loadout tracker integrated **as a module set inside ItemTracker** (originally scoped as a standalone addon `KlopfersGearTracker`, merged here to reuse `LootDetector`, `IT:FormatToPattern`, the event bus, the toast system, and the minimap button).
+
+### Concepts
+
+- **Phase** ∈ `{ "pre-raid", "1", "2", "3", "3.5", "4" }`. String key (because of `"3.5"`); display order enforced by an ordered list in code.
+- **Spec** auto-derived per character via `GetTalentTabInfo` — tree with the most points wins. `specKey = "<CLASS>-<TreeName>"` (e.g. `"DRUID-Restoration"`). Resolves automatically on respec; no manual override in MVP.
+- **Slot** = inventory slot ID, the same 17 slots tracked elsewhere (no shirt/tabard).
+- **Goal** = `{ itemID, rank, obtained, note }`. Ordered list of picks per slot; rank 1 = preferred.
+- **Source data** = `{ boss, raid }` strings shown under each item; pulled from `AtlasLootClassic_TBCA_BIS` at runtime (safe fallback to a manual entry field if not loaded).
+
+### Behaviour
+
+- **Notification scope**: only goals from the **current phase** notify, *plus* pre-raid (sticky — pre-raid goals always notify regardless of selected phase).
+- **Rank suppression**: if the slot is currently equipped with a goal item of rank N, suppress notifications for all ranks ≥ N in that slot. Equipping a rank-1 goal silences the slot entirely.
+- **Cross-phase carryover**: explicit per-phase, no auto-copy. A "Copy from previous phase" button is offered in the UI as a one-shot action.
+- **Detection sources**: `ITEM_LOOTED` from `LootDetector` (group/raid/solo loot already locale-safe) **plus** a chat-link scanner over `CHAT_MSG_RAID/RAID_LEADER/PARTY/PARTY_LEADER/WHISPER/WHISPER_INFORM` matching `item:(%d+)` against the active goal set.
+- **Dedup ("once per drop")**: in-memory `Set<itemID>` keyed by itemID, *not persisted*. Cleared on:
+  - leaving the group (`IsInGroup()` transitions to false), or
+  - changing instances/zones (`PLAYER_ENTERING_WORLD`).
+  Rule: a corpse-sighting (own loot list / `ITEM_LOOTED`) suppresses all subsequent chat-link mentions of the same itemID within the current dedup scope.
+- **Tooltip line**: `On your <SpecLabel> list (P3, rank 1)` for the active spec, dimmed line for other specs that have it, strike-through with `(have)` when `obtained=true`.
+
+### UI
+
+Top-level window has tabs: **LOADOUT / RAIDS / LOOT LOG** (WISHLIST omitted per design review).
+
+- **LOADOUT** — phase-tab subnav (P1 / P2 / P3 / P3.5 / P4 / pre-raid). Sidebar with phase summary, slots filled, avg ilvl, status breakdown (Owned / Targeted / Locked), phase actions (Copy from previous, Import, Export to /share). Main pane: filter bar + per-slot card with ranked picks. Each pick row: rank badge, icon, quality-coloured name, `boss · raid`, ilvl, status pill (`TARGET` / `OWNED` / `EQUIPPED` / `LOCKED`).
+- **RAIDS** — same data pivoted by raid instance.
+- **LOOT LOG** — re-uses `LootHistory` filtered to entries that match a goal.
+- **Spec switcher** — dropdown next to the spec name in the header; lets the user view/edit other specs' loadouts on the same character.
+- **Search** — click-to-focus filter input above the slot list. No global keybind in MVP.
+- **Theme** — dark only in MVP; light theme deferred.
+
+### Drop Alert popup
+
+Movable, centered by default. Header line `· PHASE 3 · PICK #1 FROM YOUR LIST ·`, big "IT HAS BEGUN" title, item card with rank corner-badge, three meta cells (`PHASE` / `PICK` / `LOOTED BY`), action buttons.
+
+Buttons depend on which list the item is on:
+
+| Match | Buttons |
+|---|---|
+| Main spec list only | `ROLL 100 · MS` |
+| Off spec list only  | `ROLL 99 · OS` |
+| Both spec lists     | `ROLL 100 · MS` and `ROLL 99 · OS` side by side |
+
+Rolls are issued via `RandomRoll(100, 100)` / `RandomRoll(99, 99)`. No automatic roll — the player picks. **Mark Seen** and **Snooze** are not in MVP.
+
+### SavedVariables additions
+
+`ItemTrackerCharDB` (currently unused) becomes the home for goals:
+
+```lua
+ItemTrackerCharDB.goals = {
+    [specKey] = {                         -- e.g. "DRUID-Restoration"
+        [phase] = {                       -- e.g. "3"
+            [slotID] = {
+                { itemID = 30183, rank = 1, obtained = false, note = "..." },
+                { itemID = 28744, rank = 2, obtained = false },
+            },
+        },
+    },
+}
+```
+
+`ItemTrackerDB.settings.gearGoals`:
+
+```lua
+{
+    currentPhase = "pre-raid",   -- account-wide selection
+    notifySound  = true,
+    popupAnchor  = nil,           -- { point, relativePoint, x, y }
+}
+```
+
+### External integration: AtlasLootClassic_TBCA_BIS
+
+- Detected via `IsAddOnLoaded("AtlasLootClassic_TBCA_BIS")`, all reads guarded by `pcall`.
+- Used as the source-of-truth for `boss · raid` strings when adding an item by ID.
+- Manual entry fields remain in the add/edit dialog as fallback when the dependency isn't installed or doesn't have data for an itemID.
+- Exact table layout to be inspected at implementation time and isolated in a single reader module.
+
+### Custom events (planned)
+
+| Event | Payload |
+|---|---|
+| `GEAR_GOAL_DROPPED`        | `{ itemID, itemLink, slot, rank, specKey, phase, source, looter, fromChat }` |
+| `GEAR_GOAL_LIST_CHANGED`   | `{ specKey, phase }` |
+| `GEAR_GOALS_PHASE_CHANGED` | `{ phase }` |
+| `GEAR_GOALS_SPEC_CHANGED`  | `{ specKey }` |
+
+### Module layout (planned)
+
+| File | Purpose |
+|---|---|
+| `modules/GearGoals.lua`         | Storage, spec auto-detection, goal CRUD, equipped scan, rank-suppression logic, dedup state |
+| `modules/GearGoalsDetector.lua` | Subscribes to `ITEM_LOOTED`; chat-link scanner over party/raid/whisper channels; fires `GEAR_GOAL_DROPPED` |
+| `modules/GearGoalsAlert.lua`    | Drop popup UI |
+| `modules/GearGoalsUI.lua`       | Main window: top tabs, phase tabs, sidebar, slot grid, add/edit dialog |
+| `modules/GearGoalsTooltip.lua`  | `GameTooltip:HookScript("OnTooltipSetItem")` integration |
+| `modules/GearGoalsAtlasLoot.lua`| `AtlasLootClassic_TBCA_BIS` reader, no-op when the dep is missing |
+
+### MVP / Polish slicing
+
+**MVP** (first ship):
+- Phase tabs (LOADOUT only — RAIDS / LOOT LOG tabs deferred)
+- Slot grid with ranked picks per phase
+- Add / edit / delete goal (item by name → resolves via `GetItemInfo`, queued retry on `GET_ITEM_INFO_RECEIVED`)
+- AtlasLoot autofill for `boss · raid` if available, manual fields otherwise
+- Drop popup with MS / OS roll buttons
+- Tooltip integration with phase + rank line
+- Per-spec auto-detection + spec switcher dropdown
+
+**Polish** (later passes):
+- RAIDS tab
+- LOOT LOG tab
+- Status breakdown sidebar + avg ilvl + slots-filled bar
+- Phase actions: Copy from previous phase, Import BiS list, Export to /share
+- Search filter
+- Light theme
+- Polished popup typography / animations
+
+### Open / TBD at implementation time
+
+- AtlasLoot table layout — exact paths to inspect at impl time, isolated in `GearGoalsAtlasLoot.lua`.
+- Active row indicator colour for "currently equipped" goal.
+- Chat-link scanner: which channels by default, which configurable.
+- Whether `obtained=true` is set automatically on first `ITEM_LOOTED` to that character (probably yes, as a UX shortcut), or must be flipped manually.
+
 ## Reference Addon: FishingKit
 
 FishingKit is located at `d:\Games\World of Warcraft\_anniversary_\Interface\AddOns\FishingKit`. It serves as a reference for TBC Classic API usage, coding conventions, and addon structure patterns.

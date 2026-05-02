@@ -1,6 +1,6 @@
 ## Interface: 20505
 ## Title: |cFF00D1FFItemTracker|r - TBC Anniversary Edition
-## Notes: Loot tracking with toast notifications, roll tracking, and history. Glassy transparent design.
+## Notes: Loot tracking with toast notifications, roll tracking, and history.
 ## Author: Klopfer-Hello
 ## Version: 0.5.2
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
@@ -39,3 +39,14 @@ modules\Toast.lua
 modules\UI.lua
 modules\Config.lua
 modules\Minimap.lua
+
+# GearGoals (BiS / loadout tracker per char + spec + phase)
+modules\GearGoals.lua
+modules\GearGoalsTokens.lua
+modules\GearGoalsAtlasLoot.lua
+modules\GearGoalsDetector.lua
+modules\GearGoalsTooltip.lua
+modules\GearGoalsAlert.lua
+modules\GearGoalsUI.lua
+modules\GearGoalsConfig.lua
+modules\GearGoalsCharButton.lua
