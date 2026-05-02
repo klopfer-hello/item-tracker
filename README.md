@@ -1,8 +1,7 @@
 # Klopfer's Item Tracker
 
 A loot tracker, session-gold dashboard, and per-character BiS / loadout
-tracker for **WoW TBC Classic Anniversary (2.5.5)** — three features
-behind one addon, one consistent dark/gold UI.
+tracker for **WoW TBC Classic Anniversary (2.5.5)**.
 
 ![Toast Notifications](resources/item_tracking_toasts.png)
 
@@ -21,6 +20,8 @@ behind one addon, one consistent dark/gold UI.
 - **LDB Data Broker** feed — works with ElvUI DataTexts, Titan Panel, ChocolateBar, or any LDB display
 - Tooltip breaks down raw gold, vendor value, AH value, and per-hour rates
 
+![LDB DataText Tooltip](resources/ldb_datatext.png)
+
 ### GearGoals (BiS / loadout tracker)
 - **Per-character, spec-aware, phase-organised** wishlist (pre-raid / 1 / 2 / 3 / 3.5 / 4)
 - **Drop alert popup** when a tracked item drops — MS / OS roll buttons, fade-in + corner pulse animation
@@ -30,13 +31,15 @@ behind one addon, one consistent dark/gold UI.
 - **LOOT LOG tab** — unified loot history with ALL / WISHLIST scope toggle, name + quality filters
 - **Persistent bank tracking** — items in the bank count as OWNED even when you're not at the banker (cache populated on the first bank visit and survives logout)
 
+![GearGoals — LOADOUT Tab](resources/gear_goals_loadout.png)
+
 ## Compatibility
 
 | | |
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.5.2 |
+| **Version** | 0.6.1 |
 | **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display), AtlasLootClassic, AtlasLootClassic_TBCA_BIS |
 
 ## Configuration

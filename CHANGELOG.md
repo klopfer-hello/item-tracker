@@ -1,5 +1,12 @@
 # Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
 
+## v0.6.1
+
+### Documentation
+
+- **README screenshots** — embedded one screenshot per top-level feature (`item_tracking_toasts.png` for loot, `ldb_datatext.png` for session gold, `gear_goals_loadout.png` for GearGoals). Stale screenshots from earlier loot-history / standalone-settings UIs (`loot_history.png`, `loot_history_roll_details.png`, `settings.png`) removed
+- **README version row** — corrected to match the addon version (the v0.6.0 release left the README compatibility table at 0.5.2)
+
 ## v0.6.0
 
 ### New Features
