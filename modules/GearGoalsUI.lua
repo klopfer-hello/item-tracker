@@ -56,12 +56,25 @@ local sidebar, content, scrollChild, scrollFrame
 local phaseTabs        = {}    -- phase -> button
 local slotCards        = {}    -- slotID -> { card, rows{} }
 local searchBox
-local filterMode       = "ALL"   -- "ALL" or "TARGETS"
+local filterMode       = "ALL"   -- "ALL" or "TARGETS" (LOADOUT / RAIDS panes only)
 local addDialog                  -- inline add-item dialog frame
 local searchTerm       = ""
 local viewLoadoutID              -- loadout the UI is currently viewing (defaults to main)
 local renameDialog               -- inline rename-loadout dialog
 local activeTab        = "LOADOUT"   -- one of "LOADOUT" / "RAIDS" / "LOOT LOG"
+
+-- LOOT LOG-specific filters (independent from LOADOUT/RAIDS chips).
+-- "ALL" shows every loot history entry, "WISHLIST" only entries matching a goal.
+local lootLogScope     = "ALL"
+local lootLogQuality   = nil     -- nil = show all qualities, else minimum quality (0..5)
+
+local LOOT_QUALITY_OPTIONS = {
+    { value = nil, label = "All quality" },
+    { value = 2,   label = "|cFF1EFF00Uncommon+|r" },
+    { value = 3,   label = "|cFF0070DDRare+|r" },
+    { value = 4,   label = "|cFFA335EEEpic+|r" },
+    { value = 5,   label = "|cFFFF8000Legendary|r" },
+}
 local ShowConfirm                -- forward-declared so RequestLoadoutDelete /
                                  -- RequestPhaseCopy (defined before the dialog)
                                  -- can reference it; assigned further down.
@@ -670,7 +683,93 @@ local function BuildFilterRow(parent)
     row.chipAll     = Chip("ALL SLOTS",    "ALL",     -118)
     row.chipTargets = Chip("TARGETS ONLY", "TARGETS", -12)
 
+    -- LOOT LOG-specific chips: "ALL" / "WISHLIST" toggle. Hidden until the
+    -- LOOT LOG tab is active; chained from the right edge so they share
+    -- the same right margin as the LOADOUT chips.
+    local function LogChip(label, mode, anchorOrOffset)
+        local c = CreateFrame("Button", nil, row)
+        c:SetSize(96, 22)
+        if type(anchorOrOffset) == "number" then
+            c:SetPoint("RIGHT", anchorOrOffset, 0)
+        else
+            c:SetPoint("RIGHT", anchorOrOffset, "LEFT", -6, 0)
+        end
+        local bg = c:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        c.bg = bg
+        AddBorder(c, P.border)
+        c.text = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        c.text:SetPoint("CENTER")
+        c.text:SetText(label)
+        c.mode = mode
+        c:SetScript("OnClick", function()
+            lootLogScope = mode
+            row:Repaint()
+            UI:RenderLootLogPane()
+        end)
+        c:Hide()
+        return c
+    end
+    row.chipLogWishlist = LogChip("WISHLIST", "WISHLIST", -12)
+    row.chipLogAll      = LogChip("ALL",      "ALL",      row.chipLogWishlist)
+
+    -- Quality dropdown for LOOT LOG. Anchored left of the chip pair so it
+    -- shares the right-edge stack and doesn't collide with the LOADOUT chips
+    -- (which occupy the same offsets but only one set is visible at a time).
+    local qBtn = CreateFrame("Button", nil, row)
+    qBtn:SetSize(110, 22)
+    qBtn:SetPoint("RIGHT", row.chipLogAll, "LEFT", -10, 0)
+    local qBg = qBtn:CreateTexture(nil, "BACKGROUND")
+    qBg:SetAllPoints()
+    SetColor(qBg, P.surfaceAlt)
+    AddBorder(qBtn, P.border)
+    qBtn.label = qBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    qBtn.label:SetPoint("CENTER")
+    qBtn.label:SetText("All quality")
+    qBtn.label:SetTextColor(unpack(P.value))
+    qBtn:Hide()
+
+    local qMenu = CreateFrame("Frame", nil, qBtn)
+    qMenu:SetSize(110, #LOOT_QUALITY_OPTIONS * 20 + 4)
+    qMenu:SetPoint("TOP", qBtn, "BOTTOM", 0, 1)
+    qMenu:SetFrameStrata("TOOLTIP")
+    AddBackground(qMenu, P.bg)
+    AddBorder(qMenu, P.border)
+    qMenu:Hide()
+    for i, opt in ipairs(LOOT_QUALITY_OPTIONS) do
+        local item = CreateFrame("Button", nil, qMenu)
+        item:SetSize(106, 20)
+        item:SetPoint("TOPLEFT", 2, -(i - 1) * 20 - 2)
+        item.text = item:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        item.text:SetPoint("LEFT", 6, 0)
+        item.text:SetText(opt.label)
+        local hl = item:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        SetColor(hl, { P.accent[1], P.accent[2], P.accent[3], 0.15 })
+        item:SetScript("OnClick", function()
+            lootLogQuality = opt.value
+            qBtn.label:SetText(opt.label)
+            qMenu:Hide()
+            UI:RenderLootLogPane()
+        end)
+    end
+    qBtn:SetScript("OnClick", function()
+        if qMenu:IsShown() then qMenu:Hide() else qMenu:Show() end
+    end)
+    qMenu:SetScript("OnShow", function(self)
+        local grace = 0.3
+        self:SetScript("OnUpdate", function(_, dt)
+            if grace > 0 then grace = grace - dt; return end
+            if not qBtn:IsMouseOver() and not self:IsMouseOver() then
+                self:Hide()
+            end
+        end)
+    end)
+    qMenu:SetScript("OnHide", function(self) self:SetScript("OnUpdate", nil) end)
+    row.qualityBtn = qBtn
+
     function row:Repaint()
+        -- LOADOUT/RAIDS chips
         for _, c in ipairs({ row.chipAll, row.chipTargets }) do
             if c.mode == filterMode then
                 SetColor(c.bg, P.accentDim)
@@ -680,6 +779,30 @@ local function BuildFilterRow(parent)
                 c.text:SetTextColor(unpack(P.value))
             end
         end
+        -- LOOT LOG chips
+        for _, c in ipairs({ row.chipLogAll, row.chipLogWishlist }) do
+            if c.mode == lootLogScope then
+                SetColor(c.bg, P.accentDim)
+                c.text:SetTextColor(unpack(P.accent))
+            else
+                SetColor(c.bg, P.surfaceAlt)
+                c.text:SetTextColor(unpack(P.value))
+            end
+        end
+    end
+
+    --- Show the chip set / search placeholder appropriate for the active tab.
+    --- The same searchBox is reused (text stays across tab switches), but the
+    --- placeholder hint clarifies that LOOT LOG searches item / player names.
+    function row:RepaintForTab(tab)
+        local isLoot = tab == "LOOT LOG"
+        row.chipAll:SetShown(not isLoot)
+        row.chipTargets:SetShown(not isLoot)
+        row.chipLogAll:SetShown(isLoot)
+        row.chipLogWishlist:SetShown(isLoot)
+        row.qualityBtn:SetShown(isLoot)
+        row.searchHint:SetText(isLoot and "Search item or player..." or "Filter loadout...")
+        row:Repaint()
     end
     return row
 end
@@ -1357,8 +1480,11 @@ function UI:Refresh()
         end
     end
 
-    -- Filter row chips
-    if frame.filterRow and frame.filterRow.Repaint then frame.filterRow:Repaint() end
+    -- Filter row chips — RepaintForTab swaps the visible chip set + search
+    -- hint to match the active tab, then repaints the chip colours.
+    if frame.filterRow and frame.filterRow.RepaintForTab then
+        frame.filterRow:RepaintForTab(activeTab)
+    end
 
     -- Tab counts (badges to the right of each tab label).
     local loadoutBadge, raidBadge, lootLogBadge = 0, 0, 0
@@ -1527,7 +1653,21 @@ end
 function UI:SetTab(name)
     if name ~= "LOADOUT" and name ~= "RAIDS" and name ~= "LOOT LOG" then return end
     activeTab = name
+    if frame and frame.filterRow and frame.filterRow.RepaintForTab then
+        frame.filterRow:RepaintForTab(activeTab)
+    end
     UI:Refresh()
+end
+
+function UI:GetActiveTab() return activeTab end
+
+--- Open the GearGoals window with the LOOT LOG tab pre-selected. This is
+--- the unified entry point that supersedes the legacy ItemTracker history
+--- pop-out — minimap left-click, anchor bar click, and LDB tooltip click
+--- all route through here.
+function UI:OpenLootLog()
+    UI:SetTab("LOOT LOG")
+    UI:Show()
 end
 
 function UI:CycleLoadout()
@@ -2483,7 +2623,7 @@ local function BuildLootLogPane(parent)
 
     sf.empty = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sf.empty:SetPoint("CENTER")
-    sf.empty:SetText("No tracked drops yet.")
+    sf.empty:SetText("No loot to show.")
     sf.empty:SetTextColor(unpack(P.label))
     sf.empty:Hide()
     return sf
@@ -2533,32 +2673,59 @@ local function MakeLogRow(parent)
     return row
 end
 
+--- Filter pipeline:
+---   1. lootLogQuality drops anything below the chosen minimum quality.
+---   2. searchTerm matches against item name OR player name (case-insensitive).
+---   3. lootLogScope = "WISHLIST" drops entries with no goal match;
+---      lootLogScope = "ALL" keeps every surviving entry, with or without
+---      matches (the legacy pop-out's behaviour).
 function UI:RenderLootLogPane()
     local pane = frame.lootLogPane
     if not pane then return end
     local GG = IT.GearGoals
     local LH = IT.LootHistory
-
     local entries = (LH and LH.GetAll) and LH:GetAll() or {}
     local Tokens  = IT.GearGoalsTokens
 
-    -- Build the list of matched (entry, matches) pairs in original order.
-    local matched = {}
+    local searchLower = (searchTerm or ""):lower()
+
+    local filtered = {}
     for _, e in ipairs(entries) do
-        if e.itemID then
-            local list = GG:FindAllMatches(e.itemID)
-            if Tokens and Tokens:IsToken(e.itemID) then
-                for _, m in ipairs(GG:FindAllMatchesForToken(e.itemID)) do
-                    table.insert(list, m)
+        local pass = true
+        if lootLogQuality and (e.quality or 0) < lootLogQuality then pass = false end
+        if pass and searchLower ~= "" then
+            local itemName = (e.itemLink and e.itemLink:match("%[(.-)%]") or ""):lower()
+            local player   = (e.player or ""):lower()
+            if not (itemName:find(searchLower, 1, true) or player:find(searchLower, 1, true)) then
+                pass = false
+            end
+        end
+        if pass then
+            local matches = {}
+            if e.itemID and GG and GG.FindAllMatches then
+                for _, m in ipairs(GG:FindAllMatches(e.itemID)) do
+                    table.insert(matches, m)
+                end
+                if Tokens and Tokens:IsToken(e.itemID) then
+                    for _, m in ipairs(GG:FindAllMatchesForToken(e.itemID)) do
+                        table.insert(matches, m)
+                    end
                 end
             end
-            if #list > 0 then
-                table.insert(matched, { entry = e, matches = list })
+            if lootLogScope == "ALL" or #matches > 0 then
+                table.insert(filtered, { entry = e, matches = matches })
             end
         end
     end
 
-    if #matched == 0 then
+    if #filtered == 0 then
+        if lootLogScope == "WISHLIST" then
+            pane.empty:SetText("No tracked drops match your filters.")
+        elseif searchLower ~= "" or lootLogQuality then
+            pane.empty:SetText("No loot matches your filters.")
+        else
+            pane.empty:SetText("No loot history yet.")
+        end
         pane.empty:Show()
         for _, r in ipairs(pane.rows) do r:Hide() end
         pane.scrollChild:SetHeight(pane:GetHeight())
@@ -2566,16 +2733,15 @@ function UI:RenderLootLogPane()
     end
     pane.empty:Hide()
 
-    -- Render rows top-down
-    while #pane.rows < #matched do
+    while #pane.rows < #filtered do
         table.insert(pane.rows, MakeLogRow(pane.scrollChild))
     end
 
     for i, row in ipairs(pane.rows) do
-        if i <= #matched then
-            local pair  = matched[i]
+        if i <= #filtered then
+            local pair  = filtered[i]
             local entry = pair.entry
-            local _, _, quality = GetItemInfo(entry.itemID)
+            local _, _, quality = GetItemInfo(entry.itemID or 0)
             local r, g, b = IT:GetQualityColor(quality or entry.quality or 1)
 
             row:ClearAllPoints()
@@ -2584,25 +2750,28 @@ function UI:RenderLootLogPane()
 
             row.itemLink = entry.itemLink
             row.time:SetText(IT:FormatTimeAgo(entry.timestamp))
-            row.name:SetText(entry.itemLink or ("Item " .. entry.itemID))
+            row.name:SetText(entry.itemLink or ("Item " .. (entry.itemID or "?")))
             row.name:SetTextColor(r, g, b)
             row.looter:SetText(entry.player or "—")
 
-            -- Match tags: "<loadoutName> P<N> rank #N", joined by " · "
-            local tagBits = {}
-            for _, m in ipairs(pair.matches) do
-                local lname = GG:GetLoadoutName(m.specKey) or m.specKey
-                local plabel = GG.PHASE_LABEL[m.phase] or m.phase
-                table.insert(tagBits, lname .. " " .. plabel .. " #" .. m.rank)
+            if #pair.matches > 0 then
+                local tagBits = {}
+                for _, m in ipairs(pair.matches) do
+                    local lname = (GG and GG.GetLoadoutName) and GG:GetLoadoutName(m.specKey) or m.specKey
+                    local plabel = (GG and GG.PHASE_LABEL and GG.PHASE_LABEL[m.phase]) or m.phase
+                    table.insert(tagBits, lname .. " " .. plabel .. " #" .. m.rank)
+                end
+                row.tags:SetText(table.concat(tagBits, " · "))
+            else
+                row.tags:SetText("")
             end
-            row.tags:SetText(table.concat(tagBits, " · "))
             row:Show()
         else
             row:Hide()
         end
     end
 
-    pane.scrollChild:SetHeight(math.max(#matched * (LOG_ROW_H + 4) + 8, pane:GetHeight()))
+    pane.scrollChild:SetHeight(math.max(#filtered * (LOG_ROW_H + 4) + 8, pane:GetHeight()))
 end
 
 -- ============================================================================

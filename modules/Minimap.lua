@@ -3,8 +3,8 @@
     Single Responsibility: Render and manage a minimap button
     (draggable around the minimap edge).
 
-    Left-click:        toggle anchor bar + history
-    Shift-left-click:  open loot history
+    Left-click:        toggle Gear Tracker window (LOADOUT tab default)
+    Shift-left-click:  open Gear Tracker on the LOOT LOG tab
 ]]
 
 local _, IT = ...
@@ -91,16 +91,16 @@ local function CreateMinimapButton()
     -- Highlight
     f:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-    -- Click handlers — settings live in Esc → Interface → AddOns, so no
-    -- right-click shortcut here. Brief 15 will repurpose the right-click
-    -- to open the Gear Tracker.
+    -- Click handlers. Settings live in Esc → Interface → AddOns; right-click
+    -- intentionally has no binding to keep settings access in one place.
     f:RegisterForClicks("LeftButtonUp")
     f:SetScript("OnClick", function(self, btn)
         if btn == "LeftButton" then
+            if not IT.GearGoalsUI then return end
             if IsShiftKeyDown() then
-                if IT.UI then IT.UI:ToggleHistory() end
+                IT.GearGoalsUI:OpenLootLog()
             else
-                if IT.UI then IT.UI:Toggle() end
+                IT.GearGoalsUI:Toggle()
             end
         end
     end)
@@ -124,8 +124,8 @@ local function CreateMinimapButton()
     f:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Klopfer's Item Tracker", 1.00, 0.80, 0.20)
-        GameTooltip:AddLine("Left-click: Toggle window", 1, 1, 1)
-        GameTooltip:AddLine("Shift-click: Loot history", 1, 1, 1)
+        GameTooltip:AddLine("Left-click: Gear Tracker", 1, 1, 1)
+        GameTooltip:AddLine("Shift-click: Loot log", 1, 1, 1)
         GameTooltip:AddLine("Drag: Move button", 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)
