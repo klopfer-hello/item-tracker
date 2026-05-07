@@ -127,7 +127,10 @@ WoW Events
         showMinimap           = true,
         chatOutput            = true,
         gearGoals = {
-            currentPhase     = "pre-raid",
+            -- currentPhase moved to ItemTrackerCharDB (per-character) so alts
+            -- can chase different phases independently. Migrated on first
+            -- login of each character; the old account-wide key may still
+            -- exist on upgraded accounts but is no longer read.
             notifySound      = true,
             popupAnimations  = true,    -- fade-in + corner pulse on the BiS popup
             popupAnchor      = nil,     -- { point, relativePoint, x, y }
@@ -147,6 +150,12 @@ WoW Events
 
 ```lua
 {
+    -- Active phase for goal status, popup eligibility, and the sidebar
+    -- "CURRENT PHASE" indicator. Per-character so each alt can be parked
+    -- in a different phase. Seeded from the old account-wide value on first
+    -- login after upgrade; defaults to "pre-raid" on a fresh character.
+    currentPhase   = "pre-raid",
+
     -- Loadouts (pseudo-spec containers — main / off / pvp / etc.).
     loadouts       = { { id = "...", name = "Main", color = "#FFCC33" }, ... },
     loadoutCounter = 0,

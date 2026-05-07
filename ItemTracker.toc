@@ -2,7 +2,7 @@
 ## Title: |cFFFFCC33Klopfer's Item Tracker|r
 ## Notes: Loot tracking, roll tracking, and a per-character BiS / loadout tracker (GearGoals).
 ## Author: Klopfer-Hello
-## Version: 0.6.1
+## Version: 0.7.0
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: ItemTrackerDB
 ## SavedVariablesPerCharacter: ItemTrackerCharDB

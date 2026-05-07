@@ -6,6 +6,8 @@
     modules (Detector, Alert, Tooltip, UI).
 
     Per-character data shape (in ItemTrackerCharDB):
+        currentPhase = "pre-raid"             -- per-character so alts can chase
+                                              -- different phases independently
         loadouts = {                          -- max 2 entries, user-named
             { id = "L1", name = "Resto",        isMain = true  },
             { id = "L2", name = "Enhancement",  isMain = false },
@@ -23,7 +25,6 @@
         }
 
     Account-wide settings (in ItemTrackerDB.settings.gearGoals):
-        currentPhase = "pre-raid"
         notifySound  = true
         popupAnchor  = nil
 
@@ -166,7 +167,6 @@ GG.INVTYPE_TO_SLOT = INVTYPE_TO_SLOT
 local DB_DEFAULTS = {
     settings = {
         gearGoals = {
-            currentPhase     = "pre-raid",
             notifySound      = true,
             popupAnimations  = true,    -- fade-in + corner pulse on the BiS drop popup
             popupAnchor      = nil,
@@ -179,6 +179,7 @@ local DB_DEFAULTS = {
 }
 
 local CHAR_DEFAULTS = {
+    currentPhase   = "pre-raid",  -- per-character, so alts can chase different phases
     -- Loadouts and goals are populated by EnsureLoadouts() at Initialize.
     loadouts       = nil,
     loadoutCounter = 0,
@@ -371,7 +372,7 @@ end
 -- ============================================================================
 
 local state = {
-    activePhase   = nil,    -- viewing phase (defaults from settings.currentPhase)
+    activePhase   = nil,    -- viewing phase (defaults from charDB.currentPhase)
 
     -- equipped[slotID] = { itemID, itemLink, quality, ilvl }
     equipped      = {},
@@ -746,7 +747,7 @@ function GG:StatusFor(specKey, phase, slotID, goal)
     local own = OwnershipStatus(slotID, goal.itemID, goal.obtained)
     if own then return own end
 
-    local current = (IT.db.settings.gearGoals and IT.db.settings.gearGoals.currentPhase) or "pre-raid"
+    local current = self:GetCurrentPhase()
     if GG:PhaseIndex(phase) > GG:PhaseIndex(current) then
         return GG.STATUS.LOCKED
     end
@@ -919,11 +920,11 @@ end
 -- ============================================================================
 
 function GG:GetCurrentPhase()
-    return (IT.db.settings.gearGoals and IT.db.settings.gearGoals.currentPhase) or "pre-raid"
+    return (IT.charDB and IT.charDB.currentPhase) or "pre-raid"
 end
 
 function GG:SetCurrentPhase(phase)
-    IT.db.settings.gearGoals.currentPhase = phase
+    IT.charDB.currentPhase = phase
     IT.Events:Fire("GEAR_GOALS_PHASE_CHANGED", { phase = phase })
 end
 
@@ -1109,6 +1110,19 @@ local function CheckGroupAndZoneTransitions()
 end
 
 function GG:Initialize()
+    -- One-shot migration: currentPhase used to live in account-wide settings
+    -- (IT.db.settings.gearGoals.currentPhase). It's now per-character so alts
+    -- can chase different phases independently. Seed each character's first
+    -- value from whatever the account had so existing users don't snap back
+    -- to "pre-raid". Must run BEFORE DeepDefaults, otherwise the per-char
+    -- default would mask the account value we want to copy.
+    if IT.charDB.currentPhase == nil
+       and IT.db.settings
+       and IT.db.settings.gearGoals
+       and IT.db.settings.gearGoals.currentPhase then
+        IT.charDB.currentPhase = IT.db.settings.gearGoals.currentPhase
+    end
+
     -- Apply our own defaults on top of the DB
     DeepDefaults(DB_DEFAULTS,   IT.db)
     DeepDefaults(CHAR_DEFAULTS, IT.charDB)

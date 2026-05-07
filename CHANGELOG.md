@@ -1,5 +1,11 @@
 # Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
 
+## v0.7.0
+
+### New Features
+
+- **Per-character GearGoals phase** — the active phase used for popup eligibility, goal status (LOCKED / TARGET / etc.), and the sidebar "CURRENT PHASE" indicator is now stored per-character in `ItemTrackerCharDB.currentPhase`. Each alt can sit in a different phase independently. Existing accounts: every character's first login after upgrade seeds its phase from the old account-wide value (`ItemTrackerDB.settings.gearGoals.currentPhase`), so nobody snaps back to "pre-raid". The migration runs once per character before defaults are applied; brand-new alts default to "pre-raid". The old account-wide key is left in place but never read or written
+
 ## v0.6.1
 
 ### Documentation

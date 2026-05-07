@@ -39,7 +39,7 @@ tracker for **WoW TBC Classic Anniversary (2.5.5)**.
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.5) |
 | **Interface** | 20505 |
-| **Version** | 0.6.1 |
+| **Version** | 0.7.0 |
 | **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display), AtlasLootClassic, AtlasLootClassic_TBCA_BIS |
 
 ## Configuration
