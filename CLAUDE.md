@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Klopfer's Item Tracker** is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It bundles three big features behind a single addon:
+**Klopfer's Item Tracker** is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20506, game version 2.5.6). It bundles three big features behind a single addon:
 
 1. **Loot tracking** — toast notifications for looted items, group/raid roll tracking, RCLootCouncil + LootReserve integration, scrollable loot history.
 2. **Session gold** — running gold/hr rate with vendor and Auctionator AH valuation, optional LDB DataText.

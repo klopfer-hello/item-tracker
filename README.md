@@ -1,7 +1,7 @@
 # Klopfer's Item Tracker
 
 A loot tracker, session-gold dashboard, and per-character BiS / loadout
-tracker for **WoW TBC Classic Anniversary (2.5.5)**.
+tracker for **WoW TBC Classic Anniversary (2.5.6)**.
 
 ![Toast Notifications](resources/item_tracking_toasts.png)
 
@@ -37,9 +37,9 @@ tracker for **WoW TBC Classic Anniversary (2.5.5)**.
 
 | | |
 |---|---|
-| **Game version** | TBC Classic Anniversary (2.5.5) |
-| **Interface** | 20505 |
-| **Version** | 0.7.0 |
+| **Game version** | TBC Classic Anniversary (2.5.6) |
+| **Interface** | 20506 |
+| **Version** | 0.7.1 |
 | **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display), AtlasLootClassic, AtlasLootClassic_TBCA_BIS |
 
 ## Configuration

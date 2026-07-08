@@ -1024,6 +1024,7 @@ local function BuildAddDialog(parent)
     -- the dialog is shown so the BiS list is visible without typing.
     d.editBox:HookScript("OnTextChanged", function() UI:RefreshAddSuggestions() end)
     d:HookScript("OnShow",                function() UI:RefreshAddSuggestions() end)
+    d:HookScript("OnHide",                function() pendingResolveID = nil end)
 
     return d
 end
@@ -1143,6 +1144,13 @@ end
 
 local pendingResolutions = {}   -- itemID -> {specKey, phase, slotID, goalRef}
 
+-- Item ID we're currently waiting on for ConfirmAdd. GetItemInfo() is async
+-- the first time an item is queried, so a numeric input on a cold cache used
+-- to require pressing Enter twice. We now stash the ID here and let the
+-- GET_ITEM_INFO_RECEIVED handler in UI:Initialize re-invoke ConfirmAdd once
+-- the cache has populated.
+local pendingResolveID = nil
+
 -- Resolve "name or id" string to an itemID using the local cache.
 -- Returns: itemID, errorMessage. errorMessage describes "pending" vs "not found".
 local function ResolveNameOrID(input)
@@ -1175,6 +1183,7 @@ function UI:OpenAddDialog(slotID)
     addDialog.editBox:SetText("")
     addDialog.errorText:SetText("")
     addDialog.slotID = slotID
+    pendingResolveID = nil
     addDialog:Show()
     addDialog.editBox:SetFocus()
 end
@@ -1184,9 +1193,21 @@ function UI:ConfirmAdd()
     local input = addDialog.editBox:GetText() or ""
     local id, err = ResolveNameOrID(input)
     if not id then
-        addDialog.errorText:SetText(err or "?")
+        local trimmed = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        local n = tonumber(trimmed)
+        if n then
+            -- ResolveNameOrID has already kicked off the async cache fetch.
+            -- Park the request and let GET_ITEM_INFO_RECEIVED retry us so
+            -- the user doesn't have to press Enter twice.
+            pendingResolveID = n
+            addDialog.errorText:SetText("Loading item info\226\128\166")
+        else
+            pendingResolveID = nil
+            addDialog.errorText:SetText(err or "?")
+        end
         return
     end
+    pendingResolveID = nil
 
     -- Slot-validation used to hard-reject mismatched INVTYPEs. That blocked
     -- legitimate edge cases (relics on slot 18, ranged weapons on Hunter MH,
@@ -2804,6 +2825,22 @@ function UI:Build()
 end
 
 function UI:Initialize()
-    -- Lazy-build on first show; nothing to do at addon load.
+    -- Auto-retry the add dialog once the client has finished loading the
+    -- item info for a numeric ID the user just submitted.
+    IT:RegisterEvent("GET_ITEM_INFO_RECEIVED", function(itemID, success)
+        if not pendingResolveID or itemID ~= pendingResolveID then return end
+        if not addDialog or not addDialog:IsShown() then
+            pendingResolveID = nil
+            return
+        end
+        if success then
+            UI:ConfirmAdd()
+        else
+            pendingResolveID = nil
+            addDialog.errorText:SetText("Item " .. itemID .. " not found.")
+        end
+    end)
+
+    -- Lazy-build on first show; nothing else to do at addon load.
     IT:Debug("GearGoalsUI initialized")
 end

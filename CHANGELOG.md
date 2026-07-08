@@ -1,5 +1,15 @@
 # Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
 
+## v0.7.1
+
+### Changed
+
+- **TBC Anniversary 2.5.6 compatibility** — bumped the `.toc` interface version to `20506` so the addon is no longer flagged out of date on patch 2.5.6.
+
+### Fixed
+
+- **GearGoals add-by-item-ID no longer needs a double Enter** — the first time an item is queried, `GetItemInfo()` returns nothing until the client fetches it asynchronously, so entering a numeric item ID into the GearGoals add dialog on a cold cache silently failed the first submit. The dialog now parks the pending ID, shows "Loading item info…", and auto-retries `ConfirmAdd` when `GET_ITEM_INFO_RECEIVED` fires (clearing the pending state on dialog hide / reopen). A genuinely invalid ID now reports "Item &lt;id&gt; not found." instead of doing nothing.
+
 ## v0.7.0
 
 ### New Features
