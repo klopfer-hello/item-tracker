@@ -144,6 +144,42 @@ local function RegisterSettings()
         "History size (max entries)",
         "How many loot history entries to keep before the oldest is dropped.",
         10, 500, 10)
+
+    -- Scrolling loot text ---------------------------------------------------
+    -- Independent of the history thresholds above: this shows EVERYTHING you
+    -- loot as scrolling text and never writes to the loot-history table.
+
+    addCheckbox("lootTextEnable", true,
+        "Enable scrolling loot text",
+        "Show items and money you loot as scrolling text on screen. Independent of the history quality thresholds above — position it with /kit loottext.")
+
+    addCheckbox("lootTextShowItems", true,
+        "Scrolling text — show items",
+        "Scroll every item you loot (filtered only by the minimum quality below).")
+
+    addCheckbox("lootTextShowMoney", true,
+        "Scrolling text — show money",
+        "Scroll each coin pickup as it happens.")
+
+    addDropdown("lootTextQuality", 0,
+        "Scrolling text — minimum quality",
+        "Filters the scrolling display only (not the loot history). 'Poor' shows everything you loot.",
+        QUALITY_OPTIONS)
+
+    addDropdown("lootTextUp", true,
+        "Scrolling text — direction",
+        "Direction the text drifts as it fades.",
+        TOAST_DIRECTION_OPTIONS)
+
+    addSlider("lootTextScale", 1.0,
+        "Scrolling text — scale",
+        "Font size of the scrolling loot text.",
+        0.5, 2.5, 0.05)
+
+    addSlider("lootTextDuration", 3,
+        "Scrolling text — duration (seconds)",
+        "How long each scrolling line stays on screen.",
+        1, 10, 1)
 end
 
 -- ============================================================================

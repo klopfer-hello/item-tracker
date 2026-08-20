@@ -39,7 +39,10 @@ end
 -- Constants
 -- ============================================================================
 
-IT.VERSION = "0.6.0"
+-- Read straight from the TOC so the reported version can never drift from
+-- the packaged one (it sat at 0.6.0 through two releases).
+local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+IT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version") or "0.8.0"
 IT.BUILD = "TBC-Anniversary"
 
 IT.QUALITY_POOR      = 0
@@ -97,6 +100,18 @@ local DB_DEFAULTS = {
         minimapAngle        = 225,   -- minimap button angle in degrees
         showMinimap         = true,
         chatOutput          = true,  -- print messages to chat frame
+
+        -- Scrolling loot text (modules/LootText.lua). Independent of the
+        -- history quality thresholds above: this shows EVERYTHING looted
+        -- (via ITEM_VALUE) and never writes to the history table.
+        lootTextEnable      = true,  -- master switch for the scrolling text
+        lootTextShowItems   = true,  -- scroll looted items
+        lootTextShowMoney   = true,  -- scroll looted money (per-drop)
+        lootTextQuality     = 0,     -- display-only floor; 0 = show everything
+        lootTextScale       = 1.0,   -- font scale
+        lootTextDuration    = 3,     -- seconds each line stays on screen
+        lootTextUp          = true,  -- true = drift upward, false = downward
+        lootTextPos         = nil,   -- {x, y} offset from UIParent centre
     },
     history = {},
 }
@@ -378,8 +393,10 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
             reserve = { fn = function() IT:FireTestReserve()        end, desc = "Fake LootReserve roll"                 },
             bisdrop = { fn = function() IT:FireTestGearGoal()       end, desc = "Fake BiS drop popup"                   },
             token   = { fn = function() IT:FireTestGearGoalToken()  end, desc = "Fake tier-token drop with redemption"  },
+            loottext= { fn = function() if IT.LootText then IT.LootText:FireTest() end end, desc = "Scrolling loot text burst" },
+            conjured= { fn = function() IT:FireTestConjured()      end, desc = "Fake pushed item (healthstone / mage food)" },
         }
-        local TEST_ORDER = { "loot", "gold", "roll", "council", "reserve", "bisdrop", "token" }
+        local TEST_ORDER = { "loot", "gold", "roll", "council", "reserve", "bisdrop", "token", "loottext", "conjured" }
         local sub = msg:match("^test%s+(.+)$")
         local entry = sub and TEST_DISPATCH[sub]
         if entry then
@@ -514,6 +531,22 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
                 IT:Print(string.format("Total: %d goals across all loadouts.", total), IT.Colors.success)
             end
         end
+    elseif msg == "loottext" or msg:match("^loottext ") then
+        -- Position the scrolling loot text. Bare command toggles the drag box;
+        -- `lock`/`unlock`/`reset` are explicit.
+        local sub = msg:match("^loottext%s+(.+)$")
+        if not IT.LootText then
+            IT:Print("Loot text module not loaded.", IT.Colors.warning)
+        elseif sub == "lock" then
+            IT.LootText:Lock()
+        elseif sub == "unlock" then
+            IT.LootText:Unlock()
+        elseif sub == "reset" then
+            IT.LootText:ResetPosition()
+            IT:Print("Loot text position reset to default.", IT.Colors.success)
+        else
+            IT.LootText:ToggleMover()
+        end
     elseif msg == "status" then
         IT:Print("Addon: " .. (IT.db.settings.enabled and "ON" or "OFF"), IT.Colors.info)
         IT:Print("RCLootCouncil: " .. (IT.RCLCIntegration and IT.RCLCIntegration:IsActive() and "active" or "not detected"), IT.Colors.info)
@@ -535,6 +568,7 @@ SlashCmdList["ITEMTRACKER"] = function(msg)
         IT:Print("  /kit debug        - Toggle debug mode", IT.Colors.info)
         IT:Print("  /kit version      - Show version", IT.Colors.info)
         IT:Print("  /kit test         - List UI smoke-test simulators", IT.Colors.info)
+        IT:Print("  /kit loottext     - Move the scrolling loot text (unlock/lock/reset)", IT.Colors.info)
         IT:Print("  /kit which <id>   - Explain why an item would trigger a popup", IT.Colors.info)
         IT:Print("  /kit dump         - Dump every goal on this character (item + resolved token)", IT.Colors.info)
         IT:Print("  /kit drop <id>    - Push an itemID through the real detector pipeline", IT.Colors.info)
@@ -591,6 +625,24 @@ function IT:FireTestLoot()
 
     IT:Print("Test loot: " .. fakeLink .. " by " .. player, IT.Colors.info)
     IT.Events:Fire("ITEM_LOOTED", entry)
+end
+
+-- Conjured food / healthstones / crafted items arrive as "You receive item:"
+-- (pushed) lines, NOT "You receive loot:" — verify that stream end-to-end by
+-- feeding a real pushed message through the actual LootDetector parser.
+local TEST_PUSHED = {
+    { id = 22105, name = "Master Healthstone" },       -- warlock healthstone
+    { id = 22895, name = "Conjured Cinnamon Roll" },   -- mage conjured food
+}
+
+function IT:FireTestConjured()
+    testCounter = testCounter + 1
+    local item = TEST_PUSHED[(testCounter - 1) % #TEST_PUSHED + 1]
+    local fakeLink = "|cFFFFFFFF|Hitem:" .. item.id .. "::::::::70:::::|h[" .. item.name .. "]|h|r"
+    local fmt = LOOT_ITEM_PUSHED_SELF or "You receive item: %s."
+    local msg = fmt:gsub("%%s", fakeLink)
+    IT:Print("Test conjured/pushed item: " .. fakeLink, IT.Colors.info)
+    if IT.LootDetector then IT.LootDetector:SimulateChatLoot(msg) end
 end
 
 function IT:FireTestRoll()

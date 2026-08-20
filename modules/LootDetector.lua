@@ -76,6 +76,95 @@ local function PassesQualityThreshold(quality, isGroupLoot)
 end
 
 -- ============================================================================
+-- Shared Self-Item Processing
+-- Fires ITEM_VALUE for EVERY self-received item (the "show everything" stream
+-- the on-screen loot text listens to) and, if it clears the quality gate,
+-- ITEM_LOOTED for the history/toast path. Used by both the looted stream and
+-- the pushed/created stream so conjured food, healthstones, crafted/traded
+-- items etc. surface on screen even though they're below the history threshold.
+-- ============================================================================
+
+local function ProcessSelfItem(link, count, quality, icon)
+    local itemID = IT:GetItemIDFromLink(link)
+    if not itemID then return end
+
+    local isGroupLoot = IsInGroup() or IsInRaid()
+    local entry = {
+        itemLink    = link,
+        itemID      = itemID,
+        quality     = quality or 0,
+        count       = count or 1,
+        player      = UnitName("player"),
+        isSelf      = true,
+        isGroupLoot = isGroupLoot,
+        timestamp   = time(),
+        icon        = icon,
+    }
+
+    -- Every self-received item feeds the on-screen loot text, regardless of
+    -- the history quality threshold.
+    IT.Events:Fire("ITEM_VALUE", entry)
+
+    if not PassesQualityThreshold(quality, isGroupLoot) then return end
+
+    IT:Debug("Self item detected: " .. link .. " x" .. entry.count)
+    IT.Events:Fire("ITEM_LOOTED", entry)
+end
+
+-- ============================================================================
+-- Pushed / Created Item Patterns
+-- Items that appear in bags without a loot window: mage food/water and warlock
+-- healthstones you pick up ("You receive item: %s."), and self-conjured or
+-- crafted items ("You create: %s."). On TBC 2.5.x these arrive via
+-- CHAT_MSG_LOOT (with CHAT_MSG_SYSTEM kept as a fallback for other clients).
+-- ============================================================================
+
+local pushPatterns
+
+local function BuildPushPatterns()
+    local fmt = IT.FormatToPattern
+    pushPatterns = {}
+    -- Ordered most-specific (…MULTIPLE) first so the count variants win.
+    if LOOT_ITEM_PUSHED_SELF_MULTIPLE then
+        pushPatterns[#pushPatterns + 1] = { p = fmt(IT, LOOT_ITEM_PUSHED_SELF_MULTIPLE), multi = true }
+    end
+    if LOOT_ITEM_CREATED_SELF_MULTIPLE then
+        pushPatterns[#pushPatterns + 1] = { p = fmt(IT, LOOT_ITEM_CREATED_SELF_MULTIPLE), multi = true }
+    end
+    if LOOT_ITEM_PUSHED_SELF then
+        pushPatterns[#pushPatterns + 1] = { p = fmt(IT, LOOT_ITEM_PUSHED_SELF), multi = false }
+    end
+    if LOOT_ITEM_CREATED_SELF then
+        pushPatterns[#pushPatterns + 1] = { p = fmt(IT, LOOT_ITEM_CREATED_SELF), multi = false }
+    end
+end
+
+--- Parse a pushed/created "You receive item:" / "You create:" line.
+--- Returns itemLink, count or nil if the message doesn't match.
+local function ParsePushedMessage(msg)
+    if not pushPatterns then BuildPushPatterns() end
+    for _, entry in ipairs(pushPatterns) do
+        if entry.multi then
+            local link, count = msg:match(entry.p)
+            if link then return link, tonumber(count) or 1 end
+        else
+            local link = msg:match(entry.p)
+            if link then return link, 1 end
+        end
+    end
+    return nil
+end
+
+--- Shared handler for a pushed/created message body (CHAT_MSG_LOOT + fallback).
+local function HandlePushedMessage(msg)
+    if not IT.db.settings.enabled then return end
+    local link, count = ParsePushedMessage(msg)
+    if not link then return end
+    local _, _, quality, _, _, _, _, _, _, icon = GetItemInfo(link)
+    ProcessSelfItem(link, count, quality, icon)
+end
+
+-- ============================================================================
 -- Event Handler
 -- ============================================================================
 
@@ -83,7 +172,13 @@ local function OnChatMsgLoot(msg)
     if not IT.db.settings.enabled then return end
 
     local player, itemLink, count = Detector:ParseLootMessage(msg)
-    if not player or not itemLink then return end
+    if not player or not itemLink then
+        -- Not a "You receive loot:" line. On 2.5.x, pushed/created items
+        -- (mage food, healthstones, crafted items) arrive here as
+        -- "You receive item:" / "You create:" lines — handle them too.
+        HandlePushedMessage(msg)
+        return
+    end
 
     local itemID = IT:GetItemIDFromLink(itemLink)
     if not itemID then return end
@@ -129,82 +224,20 @@ local function OnQuestLootReceived(questID, itemLink, count)
     if not IT.db.settings.enabled then return end
     if not itemLink then return end
 
-    local itemID = IT:GetItemIDFromLink(itemLink)
-    if not itemID then return end
-
     local _, _, quality, _, _, _, _, _, _, icon = GetItemInfo(itemLink)
-    local isGroupLoot = IsInGroup() or IsInRaid()
-
-    if not PassesQualityThreshold(quality, isGroupLoot) then return end
-
-    local entry = {
-        itemLink    = itemLink,
-        itemID      = itemID,
-        quality     = quality or 0,
-        count       = count or 1,
-        player      = UnitName("player"),
-        isSelf      = true,
-        isGroupLoot = isGroupLoot,
-        timestamp   = time(),
-        icon        = icon,
-    }
-
-    IT:Debug("Quest loot detected: " .. itemLink)
-    IT.Events:Fire("ITEM_LOOTED", entry)
+    ProcessSelfItem(itemLink, count, quality, icon)
 end
 
---- Fallback: items pushed to bags (quest rewards, mail, etc.)
---- Uses LOOT_ITEM_PUSHED_SELF / LOOT_ITEM_PUSHED_SELF_MULTIPLE global strings.
-local pushPatterns
-
-local function BuildPushPatterns()
-    local fmt = IT.FormatToPattern
-    pushPatterns = {}
-    if LOOT_ITEM_PUSHED_SELF_MULTIPLE then
-        pushPatterns.selfMulti = fmt(IT, LOOT_ITEM_PUSHED_SELF_MULTIPLE)
-    end
-    if LOOT_ITEM_PUSHED_SELF then
-        pushPatterns.self = fmt(IT, LOOT_ITEM_PUSHED_SELF)
-    end
-end
-
+--- Fallback: some clients deliver pushed/created item lines on CHAT_MSG_SYSTEM
+--- instead of CHAT_MSG_LOOT. Route them through the same shared handler.
 local function OnChatMsgSystem(msg)
-    if not IT.db.settings.enabled then return end
-    if not pushPatterns then BuildPushPatterns() end
+    HandlePushedMessage(msg)
+end
 
-    local link, count
-    if pushPatterns.selfMulti then
-        link, count = msg:match(pushPatterns.selfMulti)
-        if link then count = tonumber(count) end
-    end
-    if not link and pushPatterns.self then
-        link = msg:match(pushPatterns.self)
-        if link then count = 1 end
-    end
-    if not link then return end
-
-    local itemID = IT:GetItemIDFromLink(link)
-    if not itemID then return end
-
-    local _, _, quality, _, _, _, _, _, _, icon = GetItemInfo(link)
-    local isGroupLoot = IsInGroup() or IsInRaid()
-
-    if not PassesQualityThreshold(quality, isGroupLoot) then return end
-
-    local entry = {
-        itemLink    = link,
-        itemID      = itemID,
-        quality     = quality or 0,
-        count       = count or 1,
-        player      = UnitName("player"),
-        isSelf      = true,
-        isGroupLoot = isGroupLoot,
-        timestamp   = time(),
-        icon        = icon,
-    }
-
-    IT:Debug("Pushed loot detected: " .. link)
-    IT.Events:Fire("ITEM_LOOTED", entry)
+-- Test helper: run a raw CHAT_MSG_LOOT message body through the real parser,
+-- exercising the loot + pushed/created detection exactly as the game would.
+function Detector:SimulateChatLoot(msg)
+    OnChatMsgLoot(msg)
 end
 
 -- ============================================================================
