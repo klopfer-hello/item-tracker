@@ -1,5 +1,22 @@
 # Klopfer's Item Tracker - TBC Anniversary Edition - Changelog
 
+## v0.8.0
+
+### New Features
+
+- **Scrolling loot text** — a new on-screen display (`modules/LootText.lua`) that scrolls *everything* you loot, plus each coin pickup, as fading text with item icons. It's driven by the `ITEM_VALUE` stream, so it shows every self-looted item **regardless of the loot-history quality thresholds** and never writes to the history table — the two are fully independent. It has its own display-only quality floor (default *Poor* = show everything), scale, duration, and up/down direction, all in Settings → Klopfer's Item Tracker. Position it with `/kit loottext` (drag box; `lock` / `unlock` / `reset` subcommands), and preview it with `/kit test loottext`.
+  - Self-contained scroll engine (pooled FontStrings + a single OnUpdate driver). It does **not** use Blizzard's Floating Combat Text API, which 2.5.6 removed — so it works where addons like EltreumUI's LootText no longer can.
+
+- **Pushed and created items are tracked too** — conjured mage food, warlock healthstones, crafted items and anything else that lands in your bags without a loot window ("You receive item:" / "You create:") now feeds the same pipeline as ordinary loot. On 2.5.x those lines arrive on `CHAT_MSG_LOOT`; `CHAT_MSG_SYSTEM` is kept as a fallback for other clients. Preview it with `/kit test conjured`.
+
+### Changed
+
+- The self-item paths (looted, quest reward, pushed/created) share one `ProcessSelfItem` handler, so all three fire `ITEM_VALUE` for the scrolling text and only then apply the history quality gate.
+
+### Fixed
+
+- `/kit version` reported `0.6.0` on 0.7.0 and 0.7.1 — the constant is now read from the TOC via `C_AddOns.GetAddOnMetadata`, so it can no longer drift from the packaged version.
+
 ## v0.7.1
 
 ### Changed

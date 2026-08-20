@@ -10,6 +10,7 @@ tracker for **WoW TBC Classic Anniversary (2.5.6)**.
 ### Loot Tracking
 - **Toast Notifications** — pop-up cards for looted items, quality-coloured names, fade animations, configurable duration and cap
 - **Solo & Group Loot** — separate minimum quality thresholds
+- **Scrolling Loot Text** — every item you loot (and each coin pickup) scrolls on screen as fading text with icons, independent of the history quality thresholds. Own quality floor / scale / duration / direction; drag to position with `/kit loottext`. Self-contained engine (works after 2.5.6 removed Blizzard's Floating Combat Text)
 - **Roll Tracking** — real-time Need / Greed / Pass with a live sorted ranking panel (top 5)
 - **RCLootCouncil Integration** — detects loot council sessions, shows voting progress, announces awards
 - **LootReserve Integration** — tracks soft reserves, shows roll requests, announces winners
@@ -39,7 +40,7 @@ tracker for **WoW TBC Classic Anniversary (2.5.6)**.
 |---|---|
 | **Game version** | TBC Classic Anniversary (2.5.6) |
 | **Interface** | 20506 |
-| **Version** | 0.7.1 |
+| **Version** | 0.8.0 |
 | **Optional addons** | RCLootCouncil, LootReserve, Auctionator, ElvUI (or any LDB display), AtlasLootClassic, AtlasLootClassic_TBCA_BIS |
 
 ## Configuration

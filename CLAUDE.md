@@ -74,6 +74,7 @@ WoW Events
 | [modules/GoldTracker.lua](modules/GoldTracker.lua) | Session gold/hr tracking: vendor value (`GetItemInfo` sellPrice) and AH value (Auctionator API) for self-looted items; fires `GOLD_RATES_UPDATED` |
 | [modules/ElvUIDataText.lua](modules/ElvUIDataText.lua) | LDB (LibDataBroker) data source: gold/hr text, tooltip with vendor/AH breakdown, click handlers (left → Gear Tracker, shift → LOOT LOG, right → reset session); safe if LDB not available |
 | [modules/Toast.lua](modules/Toast.lua) | Toast pop-ups for loot / rolls / gold; manages stacking up or down, recycles via a pool, draws roll panel for active rolls; uses `Theme.P` for colours, no `BackdropTemplate` |
+| [modules/LootText.lua](modules/LootText.lua) | Scrolling on-screen loot text. Subscribes to `ITEM_VALUE` (every self-looted item, threshold-independent) + `GOLD_LOOTED` (per-drop delta); own display quality floor / scale / duration / direction. Self-contained scroll engine (pooled FontStrings + one OnUpdate driver) — does NOT use Blizzard's Floating Combat Text API, which 2.5.6 removed. Movable via `/kit loottext` |
 | [modules/UI.lua](modules/UI.lua) | Movable anchor bar (the toast positioning frame). Click routes to `IT.GearGoalsUI:OpenLootLog`. The legacy history pop-out has been retired |
 | [modules/Config.lua](modules/Config.lua) | Registers the parent Settings category (Esc → Interface → AddOns → Klopfer's Item Tracker) using the modern `Settings.RegisterAddOnSetting` + `CreateCheckbox` / `CreateSlider` / `CreateDropdown` flow (Molinari-style native widgets) |
 | [modules/Minimap.lua](modules/Minimap.lua) | Minimap button: left-click toggles the Gear Tracker, shift-click jumps to the LOOT LOG tab |
@@ -228,6 +229,8 @@ All integrations are safe — they do nothing if the external addon is not insta
 - **`QUEST_LOOT_RECEIVED(questID, itemLink, count)`** fires when quest reward items are received from NPCs; `LOOT_ITEM_PUSHED_SELF` is the global string used as a fallback.
 - **`C_LootHistory`** is available — `GetItem()`, `GetPlayerInfo()`, `GetNumItems()`. `LOOT_HISTORY_ROLL_CHANGED` and `LOOT_ROLLS_COMPLETE` events fire correctly.
 - **`GetLootRollTimeLeft(rollID)`** is available; wrapped in `pcall` for safety.
+- **Legacy Floating Combat Text engine is GONE in 2.5.6**: `CombatText_AddMessage`, `CombatText_GetAvailableString`, `CombatText_StandardScroll`, and `COMBAT_TEXT_TO_ANIMATE` are all `nil` (only a vestigial `CombatText` frame remains, driven by the new modernized system). Any scrolling-text feature must render its own frames — see `modules/LootText.lua`, which uses a self-contained pooled-FontString engine and never touches the Blizzard combat-text API.
+- **`SetFont(file, size, flags)` is strict in 2.5.6**: the 3rd arg must be a real flag (`OUTLINE`, `THICKOUTLINE`, `MONOCHROME`, …) or `""`/nil. Passing `"NONE"` errors. LootText uses `"OUTLINE"`.
 
 ## Coding Conventions
 
